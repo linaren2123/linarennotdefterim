@@ -11,6 +11,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- EmailJS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <!-- Stil Dosyası -->
   <link rel="stylesheet" href="styles.css">
   <link rel="manifest" href="manifest.json">
@@ -130,6 +132,12 @@
             </button>
             <button class="page-action-btn" id="zen-trigger-btn" title="Zen Modu (Ctrl+Shift+Z)">
               <i data-lucide="eye"></i>
+            </button>
+            <button class="page-action-btn" id="print-page-btn" title="Belgeyi Yazdır">
+              <i data-lucide="printer"></i>
+            </button>
+            <button class="page-action-btn" id="email-page-btn" title="E-posta ile Gönder">
+              <i data-lucide="mail"></i>
             </button>
             <button class="page-action-btn" id="favorite-toggle-btn" title="Favorilere Ekle">
               <i data-lucide="star"></i>
@@ -295,6 +303,10 @@
           <button class="settings-tab-btn" data-tab="tab-sync">
             <i data-lucide="cloud"></i>
             <span>Bulut Eşitleme</span>
+          </button>
+          <button class="settings-tab-btn" data-tab="tab-email">
+            <i data-lucide="mail"></i>
+            <span>E-posta Ayarları</span>
           </button>
         </div>
         
@@ -479,6 +491,58 @@
                 </div>
                 
                 <div id="sync-status-message" style="font-size: 11px; margin-top: 4px; display: none;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 7: E-posta Ayarları (Email Settings) -->
+          <div class="settings-tab-content" id="tab-email" style="display:none;">
+            <div class="settings-card">
+              <h4>E-posta ile Not Gönderim Ayarları</h4>
+              <p class="settings-desc">Notlarınızı hızlıca e-posta olarak göndermek için alıcı adresini ve gönderim yöntemini yapılandırın. EmailJS entegrasyonu ile notlar doğrudan arka planda gönderilir.</p>
+              
+              <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
+                <div class="settings-row">
+                  <label for="email-target-address">Alıcı E-posta Adresi</label>
+                  <input type="email" id="email-target-address" class="auth-input" placeholder="ornek@domain.com">
+                  <span style="font-size:10px; color:var(--text-muted);">Notlarınızın varsayılan olarak gönderileceği e-posta adresi.</span>
+                </div>
+                
+                <div class="settings-row">
+                  <label for="email-send-method">Gönderim Yöntemi</label>
+                  <select id="email-send-method" class="settings-select" style="padding: 10px;">
+                    <option value="mailto">Varsayılan E-posta İstemcisi (Mailto Linki)</option>
+                    <option value="emailjs">EmailJS Entegrasyonu (Arka Planda Gönderim)</option>
+                  </select>
+                </div>
+
+                <!-- EmailJS specific fields, shown only when emailjs method is active -->
+                <div id="email-emailjs-fields" style="display:none; flex-direction:column; gap:12px; border-top:1px solid var(--border-color); padding-top:12px; margin-top:4px;">
+                  <div class="settings-row">
+                    <label for="email-js-public-key">EmailJS Public Key (Genel Anahtar)</label>
+                    <input type="text" id="email-js-public-key" class="auth-input" placeholder="user_xxxxxxxxxxxxxxxxx / public_key">
+                  </div>
+                  <div class="settings-row">
+                    <label for="email-js-service-id">EmailJS Service ID (Servis Kimliği)</label>
+                    <input type="text" id="email-js-service-id" class="auth-input" placeholder="service_xxxxxxx">
+                  </div>
+                  <div class="settings-row">
+                    <label for="email-js-template-id">EmailJS Template ID (Şablon Kimliği)</label>
+                    <input type="text" id="email-js-template-id" class="auth-input" placeholder="template_xxxxxxx">
+                    <span style="font-size:10px; color:var(--text-muted);">EmailJS şablonunuzda 'to_email', 'note_title' ve 'note_content' değişkenleri kullanılmalıdır.</span>
+                  </div>
+                </div>
+
+                <div class="settings-actions" style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 8px;">
+                  <button class="btn btn-primary" id="email-save-btn">
+                    <i data-lucide="check"></i> Ayarları Kaydet
+                  </button>
+                  <button class="btn btn-secondary" id="email-test-btn">
+                    <i data-lucide="mail"></i> Test E-postası Gönder
+                  </button>
+                </div>
+                
+                <div id="email-status-message" style="font-size: 11px; margin-top: 4px; display: none;"></div>
               </div>
             </div>
           </div>

@@ -2524,3 +2524,77 @@ body.zen-active:hover .zen-float-btn {
   }
 }
 
+/* YAZDIRMA (PRINT) STİLLERİ */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  
+  .sidebar,
+  .top-accent-bar,
+  .sidebar-toggle,
+  .page-meta,
+  .editor-toolbar,
+  .editor-status-bar,
+  .backlinks-area,
+  .zen-float-btn,
+  .wiki-autocomplete,
+  .modal-overlay,
+  .auth-overlay {
+    display: none !important;
+  }
+  
+  .main-content {
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  
+  .editor-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+  }
+  
+  #page-title-input {
+    color: #000000 !important;
+    border: none !important;
+    font-size: 28pt !important;
+    font-weight: bold !important;
+    margin-bottom: 20pt !important;
+  }
+  
+  .editor-body {
+    color: #000000 !important;
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+  }
+}
+
+/* E-POSTA AYARLARI DURUM MESAJLARI */
+#email-status-message {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+#email-status-message.success {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+#email-status-message.error {
+  background: rgba(244, 63, 94, 0.1);
+  color: #f43f5e;
+  border: 1px solid rgba(244, 63, 94, 0.2);
+}
+#email-status-message.info {
+  background: rgba(99, 102, 241, 0.1);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+

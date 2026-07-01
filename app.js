@@ -155,7 +155,8 @@ function safeCreateIcons() {
     "lock": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`,
     "unlock": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`,
     "cloud": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.42-1.04-1.37-3.5-4-3.5a5.5 5.5 0 0 0-5.5 5.5c-1.39.26-2.5 1.55-2.5 3A3.5 3.5 0 0 0 7.5 19z"/></svg>`,
-    "refresh-cw": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`
+    "refresh-cw": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`,
+    "mail": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`
   };
 
   const iconElements = document.querySelectorAll("[data-lucide]");
@@ -540,6 +541,13 @@ async function startApplication() {
   } catch (e) {
     console.error("Bulut eşitleme başlatma hatası:", e);
   }
+
+  // E-posta Ayarlarını Yükle
+  try {
+    initEmailSettings();
+  } catch (e) {
+    console.error("E-posta ayarları yükleme hatası:", e);
+  }
 }
 
 // GİRİŞ KONTROLÜ VE EKRAN YÖNETİMİ
@@ -786,8 +794,29 @@ async function initDatabaseAndLoad() {
     folders = [];
   }
 
+  // Çöp Kutusu Otomatik Temizleme (30 Gün Geçenleri Sil)
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const nowTime = Date.now();
+  const pagesToPermanentlyDelete = pages.filter(p => p.deleted && p.deletedAt && (nowTime - p.deletedAt > THIRTY_DAYS_MS));
+  let trashCleaned = false;
+  
+  if (pagesToPermanentlyDelete.length > 0) {
+    console.log(`LinareN: 30 günü dolduran ${pagesToPermanentlyDelete.length} adet belge otomatik temizleniyor.`);
+    for (const p of pagesToPermanentlyDelete) {
+      try {
+        await dbManager.deletePage(p.id);
+        await dbManager.deletePageVersions(p.id);
+      } catch (err) {
+        console.error("Otomatik çöp silme IndexedDB hatası:", err);
+      }
+    }
+    // Bellekten temizle
+    pages = pages.filter(p => !pagesToPermanentlyDelete.some(dp => dp.id === p.id));
+    trashCleaned = true;
+  }
+
   // Eski Blok Verilerini Zengin HTML Biçimine Kayıpsız Dönüştür
-  let migrated = false;
+  let migrated = trashCleaned;
   pages.forEach(page => {
     if (page && page.blocks && !page.content) {
       migrated = true;
@@ -1387,6 +1416,52 @@ function initEventListeners() {
       sidebarOverlay.classList.remove("active");
     });
   }
+
+  // Yazdır Butonu
+  const printPageBtn = document.getElementById("print-page-btn");
+  if (printPageBtn) {
+    printPageBtn.addEventListener("click", () => {
+      window.print();
+    });
+  }
+
+  // E-posta Gönder Butonu (Toolbar'daki)
+  const emailPageBtn = document.getElementById("email-page-btn");
+  if (emailPageBtn) {
+    emailPageBtn.addEventListener("click", () => {
+      sendNoteViaEmail();
+    });
+  }
+
+  // E-posta Ayarları UI Olayları
+  const emailTargetInput = document.getElementById("email-target-address");
+  const emailMethodSelect = document.getElementById("email-send-method");
+  const emailPubKeyInput = document.getElementById("email-js-public-key");
+  const emailServiceInput = document.getElementById("email-js-service-id");
+  const emailTemplateInput = document.getElementById("email-js-template-id");
+  const emailSaveBtn = document.getElementById("email-save-btn");
+  const emailTestBtn = document.getElementById("email-test-btn");
+  const emailjsFields = document.getElementById("email-emailjs-fields");
+
+  if (emailMethodSelect) {
+    emailMethodSelect.addEventListener("change", (e) => {
+      if (emailjsFields) {
+        emailjsFields.style.display = e.target.value === "emailjs" ? "flex" : "none";
+      }
+    });
+  }
+
+  if (emailSaveBtn) {
+    emailSaveBtn.addEventListener("click", () => {
+      saveEmailSettings();
+    });
+  }
+
+  if (emailTestBtn) {
+    emailTestBtn.addEventListener("click", () => {
+      sendNoteViaEmail(true); // true means test email
+    });
+  }
 }
 
 // BÜTÜN AÇIK MODALLARI KAPAT
@@ -1976,6 +2051,7 @@ function deleteCurrentPage() {
 
   page.deleted = true;
   page.starred = false;
+  page.deletedAt = Date.now();
   saveData();
   renderSidebar();
 
@@ -2085,8 +2161,25 @@ function openTrashModal() {
   deletedPages.forEach(page => {
     const div = document.createElement("div");
     div.className = "trash-item";
+    
+    // Kalan gün sayısını hesapla (30 gün sınırına göre)
+    let remainingDaysText = "";
+    if (page.deletedAt) {
+      const diffMs = (page.deletedAt + (30 * 24 * 60 * 60 * 1000)) - Date.now();
+      const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+      remainingDaysText = diffDays > 0 ? `${diffDays} gün kaldı` : "Süre doldu (yakında silinecek)";
+    } else {
+      // Eğer deletedAt yoksa (eski silinenler için), silinme tarihini şimdi olarak varsayalım
+      page.deletedAt = Date.now();
+      saveData();
+      remainingDaysText = "30 gün kaldı";
+    }
+
     div.innerHTML = `
-      <span class="page-title">${page.title || 'Başlıksız'}</span>
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <span class="page-title" style="font-weight:500;">${page.title || 'Başlıksız'}</span>
+        <span style="font-size:10px; color:var(--text-muted);">${remainingDaysText}</span>
+      </div>
       <div class="trash-item-actions">
         <button class="trash-btn restore" title="Kurtar"><span data-lucide="rotate-ccw"></span></button>
         <button class="trash-btn delete" title="Kalıcı Olarak Sil"><span data-lucide="trash-2"></span></button>
@@ -2105,6 +2198,7 @@ function restorePage(pageId) {
   const page = pages.find(p => p.id === pageId);
   if (page) {
     page.deleted = false;
+    delete page.deletedAt;
     saveData();
     renderSidebar();
     openTrashModal();
@@ -3589,6 +3683,178 @@ function handleDisconnectSync() {
     updateSyncUIState();
     hideSyncStatus();
     alert("Bulut bağlantısı sonlandırıldı.");
+  }
+}
+
+// =========================================================================
+// 9. E-POSTA GÖNDERİM VE YAPILANDIRMA MANTISI
+// =========================================================================
+function initEmailSettings() {
+  const target = localStorage.getItem("linaren_email_target") || "";
+  const method = localStorage.getItem("linaren_email_method") || "mailto";
+  const pubKey = localStorage.getItem("linaren_email_pubkey") || "";
+  const serviceId = localStorage.getItem("linaren_email_service") || "";
+  const templateId = localStorage.getItem("linaren_email_template") || "";
+
+  const emailTargetInput = document.getElementById("email-target-address");
+  const emailMethodSelect = document.getElementById("email-send-method");
+  const emailPubKeyInput = document.getElementById("email-js-public-key");
+  const emailServiceInput = document.getElementById("email-js-service-id");
+  const emailTemplateInput = document.getElementById("email-js-template-id");
+  const emailjsFields = document.getElementById("email-emailjs-fields");
+
+  if (emailTargetInput) emailTargetInput.value = target;
+  if (emailMethodSelect) {
+    emailMethodSelect.value = method;
+    if (emailjsFields) {
+      emailjsFields.style.display = method === "emailjs" ? "flex" : "none";
+    }
+  }
+  if (emailPubKeyInput) emailPubKeyInput.value = pubKey;
+  if (emailServiceInput) emailServiceInput.value = serviceId;
+  if (emailTemplateInput) emailTemplateInput.value = templateId;
+
+  // EmailJS kütüphanesini initialize et
+  if (method === "emailjs" && pubKey && typeof emailjs !== "undefined") {
+    try {
+      emailjs.init({ publicKey: pubKey });
+      console.log("LinareN: EmailJS başarıyla initialize edildi.");
+    } catch (e) {
+      console.error("LinareN: EmailJS init hatası:", e);
+    }
+  }
+}
+
+function saveEmailSettings() {
+  const target = document.getElementById("email-target-address")?.value.trim() || "";
+  const method = document.getElementById("email-send-method")?.value || "mailto";
+  const pubKey = document.getElementById("email-js-public-key")?.value.trim() || "";
+  const serviceId = document.getElementById("email-js-service-id")?.value.trim() || "";
+  const templateId = document.getElementById("email-js-template-id")?.value.trim() || "";
+
+  if (method === "emailjs" && (!target || !pubKey || !serviceId || !templateId)) {
+    showEmailStatus("Lütfen EmailJS için tüm alanları ve alıcı e-posta adresini doldurun.", "error");
+    return;
+  } else if (method === "mailto" && !target) {
+    showEmailStatus("Lütfen alıcı e-posta adresini girin.", "error");
+    return;
+  }
+
+  localStorage.setItem("linaren_email_target", target);
+  localStorage.setItem("linaren_email_method", method);
+  localStorage.setItem("linaren_email_pubkey", pubKey);
+  localStorage.setItem("linaren_email_service", serviceId);
+  localStorage.setItem("linaren_email_template", templateId);
+
+  // EmailJS tekrar init et
+  if (method === "emailjs" && pubKey && typeof emailjs !== "undefined") {
+    try {
+      emailjs.init({ publicKey: pubKey });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  showEmailStatus("E-posta ayarları başarıyla kaydedildi.", "success");
+}
+
+function showEmailStatus(msg, type) {
+  const container = document.getElementById("email-status-message");
+  if (!container) return;
+
+  container.className = "";
+  container.classList.add(type); // success, error, info
+  container.textContent = msg;
+  container.style.display = "block";
+
+  setTimeout(() => {
+    container.style.display = "none";
+  }, 5000);
+}
+
+async function sendNoteViaEmail(isTest = false) {
+  const target = localStorage.getItem("linaren_email_target");
+  const method = localStorage.getItem("linaren_email_method") || "mailto";
+
+  if (!target) {
+    alert("Lütfen önce Ayarlar -> E-posta Ayarları sekmesinden alıcı e-posta adresini yapılandırın.");
+    // Ayarlar modalini aç ve o sekmeye odaklan
+    const settingsBtn = document.getElementById("settings-btn");
+    if (settingsBtn) settingsBtn.click();
+    const emailTabBtn = document.querySelector('.settings-tab-btn[data-tab="tab-email"]');
+    if (emailTabBtn) emailTabBtn.click();
+    return;
+  }
+
+  // Not detayları
+  let title = "Test E-postası";
+  let htmlContent = "Bu bir test e-postasıdır. LinareN e-posta yapılandırmanız çalışıyor!";
+
+  if (!isTest) {
+    const page = pages.find(p => p.id === currentPageId);
+    if (!page) return;
+    title = page.title || "Başlıksız Not";
+    htmlContent = elements.editorBody.innerHTML || "";
+  }
+
+  // Plain text içeriği oluştur (HTML etiketlerinden arındırılmış)
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = htmlContent;
+  const textContent = tempDiv.textContent || tempDiv.innerText || "";
+
+  if (method === "mailto") {
+    // Mailto linki oluştur
+    const subject = encodeURIComponent(title);
+    const body = encodeURIComponent(textContent);
+    const mailtoUrl = `mailto:${target}?subject=${subject}&body=${body}`;
+    window.location.href = mailtoUrl;
+  } else if (method === "emailjs") {
+    const pubKey = localStorage.getItem("linaren_email_pubkey");
+    const serviceId = localStorage.getItem("linaren_email_service");
+    const templateId = localStorage.getItem("linaren_email_template");
+
+    if (!pubKey || !serviceId || !templateId) {
+      alert("Lütfen önce Ayarlar -> E-posta Ayarları sekmesinden EmailJS parametrelerini eksiksiz girin.");
+      return;
+    }
+
+    if (typeof emailjs === "undefined") {
+      alert("EmailJS SDK'sı yüklenemedi. Lütfen internet bağlantınızı kontrol edin.");
+      return;
+    }
+
+    // Gönderim durumunu göster
+    if (isTest) {
+      showEmailStatus("Test e-postası gönderiliyor...", "info");
+    } else {
+      alert("E-posta arka planda gönderiliyor...");
+    }
+
+    try {
+      const templateParams = {
+        to_email: target,
+        note_title: title,
+        note_content: textContent
+      };
+
+      const response = await emailjs.send(serviceId, templateId, templateParams);
+      if (response.status === 200) {
+        if (isTest) {
+          showEmailStatus("Test e-postası başarıyla gönderildi!", "success");
+        } else {
+          alert("E-posta başarıyla gönderildi!");
+        }
+      } else {
+        throw new Error("Yanıt kodu: " + response.status);
+      }
+    } catch (err) {
+      console.error("LinareN: E-posta gönderim hatası:", err);
+      if (isTest) {
+        showEmailStatus(`Gönderim başarısız: ${err.message || err}`, "error");
+      } else {
+        alert(`E-posta gönderimi başarısız oldu: ${err.message || err}`);
+      }
+    }
   }
 }
 
