@@ -4642,6 +4642,12 @@ async function checkBackupScheduler() {
     }
   }
 
+  if (shouldBackup) {
+    console.log(`LinareN Scheduler: Zamanlanmış yedekleme tetikleniyor. Sağlayıcı: ${provider}`);
+    if (provider === "gdrive") {
+      uploadToGoogleDrive(true);
+    } else if (provider === "webdav") {
+      uploadToWebDAV(true);
     }
   }
 }
