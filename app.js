@@ -4184,6 +4184,16 @@ async function uploadToGoogleDrive(isScheduled = false) {
     return;
   }
 
+  // Otomatik yedeklemede pop-up engelleyicilere takılmamak için token kontrolü
+  const tokenExpires = parseInt(localStorage.getItem("linaren_gdrive_token_expires") || "0", 10);
+  const isExpired = Date.now() > tokenExpires;
+
+  if (isScheduled && (!gdriveAccessToken || isExpired)) {
+    console.warn("LinareN Scheduler: GDrive oturumu kapalı veya süresi dolmuş. Otomatik yedekleme atlandı.");
+    showSyncStatus("Google Drive oturum süresi doldu, otomatik yedek atlandı.", "error");
+    return;
+  }
+
   requestGoogleAccessToken(async () => {
     try {
       showSyncStatus("Google Drive yedeklemesi başlatılıyor...", "info");
@@ -4463,6 +4473,9 @@ function saveBackupSchedulerSettings() {
 
   updateBackupSchedulerUI();
   alert("Otomatik yedekleme zamanlayıcısı ayarları kaydedildi.");
+
+  // Ayarlar kaydedildikten 1 saniye sonra otomatik yedeklemeyi tetikle (zamanı geçmişse anında yedekler)
+  setTimeout(checkBackupScheduler, 1000);
 }
 
 function updateBackupSchedulerUI() {
@@ -4512,6 +4525,7 @@ async function checkBackupScheduler() {
   let shouldBackup = false;
 
   if (freq === "hourly") {
+    // 1 saat (3600000 ms) geçtiyse yedekle
     if (now - lastBackup >= 3600000) {
       shouldBackup = true;
     }
@@ -4520,22 +4534,25 @@ async function checkBackupScheduler() {
     const [targetHour, targetMinute] = timeVal.split(":").map(Number);
     
     const nowTimeObj = new Date();
-    const currentHour = nowTimeObj.getHours();
-    const currentMinute = nowTimeObj.getMinutes();
-
     const targetTimeToday = new Date();
     targetTimeToday.setHours(targetHour, targetMinute, 0, 0);
 
-    const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+    const lastBackupDate = new Date(lastBackup);
+    const isSameDay = nowTimeObj.getDate() === lastBackupDate.getDate() &&
+                      nowTimeObj.getMonth() === lastBackupDate.getMonth() &&
+                      nowTimeObj.getFullYear() === lastBackupDate.getFullYear() &&
+                      lastBackup > 0;
 
     if (freq === "daily") {
-      if (nowTimeObj >= targetTimeToday && (now - lastBackup >= MIN_INTERVAL_MS)) {
+      // Hedef saat geçildiyse ve bugün hiç yedekleme yapılmadıysa
+      if (nowTimeObj >= targetTimeToday && !isSameDay) {
         shouldBackup = true;
       }
     } else if (freq === "weekly") {
       const targetDay = parseInt(localStorage.getItem("linaren_backup_day") || "1", 10);
       const currentDay = nowTimeObj.getDay();
-      if (currentDay === targetDay && nowTimeObj >= targetTimeToday && (now - lastBackup >= MIN_INTERVAL_MS)) {
+      // Hedef gün ve hedef saat geçildiyse ve bugün hiç yedekleme yapılmadıysa
+      if (currentDay === targetDay && nowTimeObj >= targetTimeToday && !isSameDay) {
         shouldBackup = true;
       }
     }
