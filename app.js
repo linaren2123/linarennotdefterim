@@ -4223,6 +4223,24 @@ async function uploadToGoogleDrive(isScheduled = false) {
         folderId = folderData.id;
       }
 
+      // 2. Var olan yedek dosyasını sorgula (linaren_backup.json)
+      let fileId = null;
+      const fileSearchUrl = `https://www.googleapis.com/drive/v3/files?q=name='linaren_backup.json' and '${folderId}' in parents and trashed=false`;
+      
+      const fileSearchResp = await fetch(fileSearchUrl, {
+        headers: {
+          "Authorization": `Bearer ${gdriveAccessToken}`,
+          "Accept": "application/json"
+        }
+      });
+
+      if (fileSearchResp.ok) {
+        const fileSearchData = await fileSearchResp.json();
+        if (fileSearchData.files && fileSearchData.files.length > 0) {
+          fileId = fileSearchData.files[0].id;
+        }
+      }
+
       const backupObj = {
         clientLastUpdated: Date.now(),
         pages: pages,
@@ -4230,41 +4248,57 @@ async function uploadToGoogleDrive(isScheduled = false) {
       };
 
       const backupContent = JSON.stringify(backupObj, null, 2);
-      const fileName = `linaren_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
 
-      const metadata = {
-        name: fileName,
-        parents: [folderId],
-        mimeType: "application/json"
-      };
+      if (fileId) {
+        // Var olan dosyayı güncelle (PATCH /upload/drive/v3/files/fileId?uploadType=media)
+        showSyncStatus("Var olan yedek dosyası güncelleniyor...", "info");
+        const updateResp = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+          method: "PATCH",
+          headers: {
+            "Authorization": `Bearer ${gdriveAccessToken}`,
+            "Content-Type": "application/json; charset=UTF-8"
+          },
+          body: backupContent
+        });
 
-      const boundary = "linaren_boundary_marker";
-      let body = "";
-      body += `--${boundary}\r\n`;
-      body += `Content-Type: application/json; charset=UTF-8\r\n\r\n`;
-      body += `${JSON.stringify(metadata)}\r\n`;
-      body += `--${boundary}\r\n`;
-      body += `Content-Type: application/json\r\n\r\n`;
-      body += `${backupContent}\r\n`;
-      body += `--${boundary}--`;
+        if (!updateResp.ok) throw new Error("Yedek dosyası güncellenemedi.");
+      } else {
+        // Yeni dosya oluştur (POST /upload/drive/v3/files?uploadType=multipart)
+        showSyncStatus("Yeni yedek dosyası oluşturuluyor...", "info");
+        const metadata = {
+          name: "linaren_backup.json",
+          parents: [folderId],
+          mimeType: "application/json"
+        };
 
-      const uploadResp = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${gdriveAccessToken}`,
-          "Content-Type": `multipart/related; boundary=${boundary}`
-        },
-        body: body
-      });
+        const boundary = "linaren_boundary_marker";
+        let body = "";
+        body += `--${boundary}\r\n`;
+        body += `Content-Type: application/json; charset=UTF-8\r\n\r\n`;
+        body += `${JSON.stringify(metadata)}\r\n`;
+        body += `--${boundary}\r\n`;
+        body += `Content-Type: application/json\r\n\r\n`;
+        body += `${backupContent}\r\n`;
+        body += `--${boundary}--`;
 
-      if (!uploadResp.ok) throw new Error("Yedek dosyası yüklenemedi.");
+        const uploadResp = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${gdriveAccessToken}`,
+            "Content-Type": `multipart/related; boundary=${boundary}`
+          },
+          body: body
+        });
+
+        if (!uploadResp.ok) throw new Error("Yedek dosyası oluşturulamadı.");
+      }
 
       localStorage.setItem("linaren_last_drive_backup", Date.now().toString());
       updateBackupSchedulerUI();
       showSyncStatus("Google Drive yedeklemesi başarıyla tamamlandı!", "success");
       
       if (!isScheduled) {
-        alert("Yedek dosyanız Google Drive'da 'LinareN_Backups' klasörüne başarıyla yüklendi!");
+        alert("Yedek dosyanız Google Drive'da başarıyla güncellendi!");
       }
     } catch (err) {
       console.error(err);
