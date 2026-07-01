@@ -902,9 +902,13 @@ function initEventListeners() {
   // Yeni Sayfa Ekleme
   elements.newPageBtn.addEventListener("click", () => createNewPage());
 
-  // Mobil Sidebar
+  // Mobil Sidebar & Overlay
   elements.sidebarToggle.addEventListener("click", () => {
-    elements.sidebar.classList.toggle("open");
+    const isOpen = elements.sidebar.classList.toggle("open");
+    const overlay = document.getElementById("sidebar-overlay");
+    if (overlay) {
+      overlay.classList.toggle("active", isOpen);
+    }
   });
 
   // Kapatma tetikleyicileri
@@ -1383,14 +1387,6 @@ function initEventListeners() {
       sidebarOverlay.classList.remove("active");
     });
   }
-
-  // Mobil toggle tıklandığında overlay'i de tetikle
-  elements.sidebarToggle.addEventListener("click", () => {
-    const isOpen = elements.sidebar.classList.contains("open");
-    if (sidebarOverlay) {
-      sidebarOverlay.classList.toggle("active", !isOpen);
-    }
-  });
 }
 
 // BÜTÜN AÇIK MODALLARI KAPAT
@@ -3249,15 +3245,13 @@ function runGraphSimulationLoop() {
 // =========================================================================
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js")
-        .then((reg) => {
-          console.log("LinareN: Service Worker başarıyla kaydedildi:", reg.scope);
-        })
-        .catch((err) => {
-          console.error("LinareN: Service Worker kaydı başarısız:", err);
-        });
-    });
+    navigator.serviceWorker.register("./sw.js")
+      .then((reg) => {
+        console.log("LinareN: Service Worker başarıyla kaydedildi:", reg.scope);
+      })
+      .catch((err) => {
+        console.error("LinareN: Service Worker kaydı başarısız:", err);
+      });
   }
 }
 

@@ -72,14 +72,14 @@ self.addEventListener("fetch", (e) => {
         if (cachedResponse) {
           // Serve from cache but fetch fresh in background to update
           fetch(e.request).then((networkResponse) => {
-            if (networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse));
+            if (networkResponse.status === 200 || networkResponse.status === 0) {
+              caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse.clone()));
             }
           }).catch(() => {});
           return cachedResponse;
         }
         return fetch(e.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
+          if (networkResponse.status === 200 || networkResponse.status === 0) {
             const responseClone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseClone));
           }
