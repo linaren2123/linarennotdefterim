@@ -522,7 +522,13 @@
                 <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
                   <div class="settings-row">
                     <label for="sync-gdrive-client-id">Google Client ID (İstemci Kimliği)</label>
-                    <input type="text" id="sync-gdrive-client-id" class="auth-input" placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com">
+                    <div style="display:flex; gap:8px;">
+                      <input type="text" id="sync-gdrive-client-id" class="auth-input" placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com">
+                      <button class="btn btn-secondary" id="sync-gdrive-import-json-btn" style="white-space:nowrap; padding: 10px 14px;" title="Google Cloud JSON Dosyasını Yükle">
+                        <i data-lucide="upload"></i> JSON Yükle
+                      </button>
+                    </div>
+                    <input type="file" id="sync-gdrive-json-file-input" style="display:none;" accept=".json">
                   </div>
                   
                   <div class="settings-row">

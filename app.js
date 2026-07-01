@@ -1495,6 +1495,55 @@ function initEventListeners() {
       initGoogleDrive(); // Client ID değişince init et
     });
   }
+
+  // Google JSON İçe Aktarma Olayları
+  const gdriveImportBtn = document.getElementById("sync-gdrive-import-json-btn");
+  const gdriveJsonInput = document.getElementById("sync-gdrive-json-file-input");
+
+  if (gdriveImportBtn && gdriveJsonInput) {
+    gdriveImportBtn.addEventListener("click", () => {
+      gdriveJsonInput.click();
+    });
+
+    gdriveJsonInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          let clientId = "";
+
+          // Google OAuth JSON yapısını çözümle (web, installed veya düz client_id)
+          if (data.web && data.web.client_id) {
+            clientId = data.web.client_id;
+          } else if (data.installed && data.installed.client_id) {
+            clientId = data.installed.client_id;
+          } else if (data.client_id) {
+            clientId = data.client_id;
+          }
+
+          if (clientId) {
+            localStorage.setItem("linaren_gdrive_client_id", clientId);
+            if (gdriveClientInput) {
+              gdriveClientInput.value = clientId;
+            }
+            initGoogleDrive();
+            updateGDriveUI();
+            alert("Google Client ID başarıyla içeri aktarıldı ve kaydedildi!");
+          } else {
+            alert("Seçilen JSON dosyasında 'client_id' bilgisi bulunamadı. Lütfen geçerli bir Google OAuth Client JSON dosyası yükleyin.");
+          }
+        } catch (err) {
+          console.error("JSON okuma hatası:", err);
+          alert("Dosya okunamadı veya geçersiz JSON formatı.");
+        }
+        gdriveJsonInput.value = ""; // Aynı dosya tekrar seçildiğinde tetiklenebilmesi için temizle
+      };
+      reader.readAsText(file);
+    });
+  }
   if (gdriveApiKeyInput) {
     gdriveApiKeyInput.addEventListener("input", (e) => {
       localStorage.setItem("linaren_gdrive_api_key", e.target.value.trim());
