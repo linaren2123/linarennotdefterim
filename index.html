@@ -13,6 +13,9 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- EmailJS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <!-- Google Drive API & Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
   <!-- Stil Dosyası -->
   <link rel="stylesheet" href="styles.css">
   <link rel="manifest" href="manifest.json">
@@ -450,49 +453,185 @@
             </div>
           </div>
 
-          <!-- Tab 6: Bulut Eşitleme (Cloud Sync) -->
-          <div class="settings-tab-content" id="tab-sync" style="display:none;">
-            <div class="settings-card">
-              <h4>GitHub Gist Bulut Senkronizasyonu</h4>
-              <p class="settings-desc">Notlarınızı ve klasörlerinizi GitHub Gist üzerinden yedekleyebilir ve diğer cihazlarınızla eşitleyebilirsiniz. Erişim belirteci ve verileriniz sadece bu tarayıcıda saklanır.</p>
-              
-              <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
-                <div class="settings-row">
-                  <label for="sync-github-token">GitHub Kişisel Erişim Jetonu (PAT)</label>
-                  <input type="password" id="sync-github-token" class="auth-input" placeholder="ghp_xxxxxxxxxxxx (gist yetkili token)">
-                  <span style="font-size:10px; color:var(--text-muted);">Token almak için GitHub hesabınızdan 'gist' yetkili bir Personal Access Token (classic) üretin.</span>
-                </div>
+          <!-- Tab 6: Bulut Eşitleme & Çoklu Yedekleme -->
+          <div class="settings-tab-content" id="tab-sync" style="display:none; flex-direction:column; gap:16px;">
+            <!-- Sağlayıcı Seçici Sekmeler -->
+            <div class="settings-card" style="padding: 14px;">
+              <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; display: block;">Aktif Bulut Sağlayıcısı</label>
+              <div style="display: flex; gap: 8px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 4px;">
+                <button class="settings-tab-btn" id="provider-tab-gist" style="flex: 1; padding: 8px; font-size: 12px; font-weight: 500; border-radius: 6px; border: none; background: transparent; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 6px;" data-provider="gist">
+                  <i data-lucide="github" style="width: 14px; height: 14px;"></i> GitHub Gist
+                </button>
+                <button class="settings-tab-btn" id="provider-tab-gdrive" style="flex: 1; padding: 8px; font-size: 12px; font-weight: 500; border-radius: 6px; border: none; background: transparent; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 6px;" data-provider="gdrive">
+                  <i data-lucide="cloud" style="width: 14px; height: 14px;"></i> Google Drive
+                </button>
+                <button class="settings-tab-btn" id="provider-tab-webdav" style="flex: 1; padding: 8px; font-size: 12px; font-weight: 500; border-radius: 6px; border: none; background: transparent; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; gap: 6px;" data-provider="webdav">
+                  <i data-lucide="hard-drive" style="width: 14px; height: 14px;"></i> WebDAV Bulut
+                </button>
+              </div>
+            </div>
+
+            <!-- Sağlayıcı Panelleri -->
+            <div id="sync-provider-panels">
+              <!-- Panel A: GitHub Gist -->
+              <div class="settings-card" id="panel-sync-gist" style="display:none;">
+                <h4>GitHub Gist Senkronizasyonu</h4>
+                <p class="settings-desc">Notlarınızı ve klasörlerinizi GitHub Gist üzerinden yedekleyebilir ve cihazlar arası eşitleyebilirsiniz.</p>
                 
-                <div class="settings-row">
-                  <label for="sync-gist-id">Gist Kimliği (ID)</label>
-                  <div style="display:flex; gap:8px;">
-                    <input type="text" id="sync-gist-id" class="auth-input" placeholder="Gist ID (Otomatik oluşturmak için boş bırakın)">
-                    <button class="btn btn-secondary" id="sync-create-gist-btn" style="white-space:nowrap; padding: 10px 14px;">
-                      <i data-lucide="plus"></i> Yeni Gist Oluştur
+                <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
+                  <div class="settings-row">
+                    <label for="sync-github-token">GitHub Kişisel Erişim Jetonu (PAT)</label>
+                    <input type="password" id="sync-github-token" class="auth-input" placeholder="ghp_xxxxxxxxxxxx (gist yetkili token)">
+                    <span style="font-size:10px; color:var(--text-muted);">Token almak için GitHub hesabınızdan 'gist' yetkili bir Personal Access Token (classic) üretin.</span>
+                  </div>
+                  
+                  <div class="settings-row">
+                    <label for="sync-gist-id">Gist Kimliği (ID)</label>
+                    <div style="display:flex; gap:8px;">
+                      <input type="text" id="sync-gist-id" class="auth-input" placeholder="Gist ID (Otomatik oluşturmak için boş bırakın)">
+                      <button class="btn btn-secondary" id="sync-create-gist-btn" style="white-space:nowrap; padding: 10px 14px;">
+                        <i data-lucide="plus"></i> Yeni Gist Oluştur
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style="display:flex; align-items:center; gap:8px; margin: 4px 0;">
+                    <input type="checkbox" id="sync-auto-check" style="width:16px; height:16px; accent-color:var(--accent);">
+                    <label for="sync-auto-check" style="font-size:13px; color:var(--text-primary); cursor:pointer; user-select:none;">Değişikliklerde Otomatik Eşitle (Auto-Sync)</label>
+                  </div>
+
+                  <div class="settings-actions" style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 8px;">
+                    <button class="btn btn-primary" id="sync-push-btn">
+                      <i data-lucide="upload"></i> Buluta Gönder (Push)
+                    </button>
+                    <button class="btn btn-secondary" id="sync-pull-btn">
+                      <i data-lucide="download"></i> Buluttan Çek (Pull)
+                    </button>
+                    <button class="btn btn-warning" id="sync-disconnect-btn" style="background-color:rgba(244, 63, 94, 0.1); border-color:var(--danger); color:var(--danger); margin-left:auto;">
+                      Bağlantıyı Kes
                     </button>
                   </div>
                 </div>
+              </div>
 
-                <div style="display:flex; align-items:center; gap:8px; margin: 4px 0;">
-                  <input type="checkbox" id="sync-auto-check" style="width:16px; height:16px; accent-color:var(--accent);">
-                  <label for="sync-auto-check" style="font-size:13px; color:var(--text-primary); cursor:pointer; user-select:none;">Değişikliklerde Otomatik Eşitle (Auto-Sync)</label>
+              <!-- Panel B: Google Drive -->
+              <div class="settings-card" id="panel-sync-gdrive" style="display:none;">
+                <h4>Google Drive Yedeklemesi</h4>
+                <p class="settings-desc">Belgelerinizi Google Drive'da otomatik oluşturulan 'LinareN_Backups' klasörü altına zaman damgalı JSON dosyaları olarak yedekleyin.</p>
+                
+                <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
+                  <div class="settings-row">
+                    <label for="sync-gdrive-client-id">Google Client ID (İstemci Kimliği)</label>
+                    <input type="text" id="sync-gdrive-client-id" class="auth-input" placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com">
+                  </div>
+                  
+                  <div class="settings-row">
+                    <label for="sync-gdrive-api-key">Google API Key (Uygulama Anahtarı)</label>
+                    <input type="password" id="sync-gdrive-api-key" class="auth-input" placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXX">
+                    <span style="font-size:10px; color:var(--text-muted);">Güvenlik için Google Cloud Console üzerinden API Anahtarına 'Google Drive API' kısıtlaması eklemeniz önerilir.</span>
+                  </div>
+
+                  <div class="settings-row" id="gdrive-status-row" style="display:flex; align-items:center; gap:10px; padding: 10px; background:var(--bg-primary); border: 1px solid var(--border-color); border-radius:6px; margin-top:4px;">
+                    <span id="gdrive-login-status" style="font-size:12.5px; font-weight:500; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                      <span style="width:8px; height:8px; border-radius:50%; background:var(--danger); display:inline-block;" id="gdrive-status-dot"></span> Bağlı Değil
+                    </span>
+                    <button class="btn btn-primary" id="sync-gdrive-login-btn" style="margin-left:auto; padding: 6px 12px; font-size:11.5px;">
+                      <i data-lucide="log-in"></i> Google Hesabını Bağla
+                    </button>
+                    <button class="btn btn-secondary" id="sync-gdrive-logout-btn" style="margin-left:auto; padding: 6px 12px; font-size:11.5px; display:none;">
+                      <i data-lucide="log-out"></i> Bağlantıyı Kes
+                    </button>
+                  </div>
+
+                  <div class="settings-actions" id="gdrive-actions" style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 8px; display:none;">
+                    <button class="btn btn-primary" id="sync-gdrive-push-btn">
+                      <i data-lucide="upload-cloud"></i> Google Drive'a Şimdi Yedekle
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Panel C: WebDAV -->
+              <div class="settings-card" id="panel-sync-webdav" style="display:none;">
+                <h4>WebDAV Bulut Yedeklemesi</h4>
+                <p class="settings-desc">Kişisel bulut sunucunuza (Nextcloud, ownCloud vb.) WebDAV protokolü üzerinden yedekleme yapın.</p>
+                
+                <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
+                  <div class="settings-row">
+                    <label for="sync-webdav-url">WebDAV Sunucu Adresi (URL)</label>
+                    <input type="url" id="sync-webdav-url" class="auth-input" placeholder="https://bulut.siteniz.com/remote.php/dav/files/kullanici/LinareN_Backups/">
+                    <span style="font-size:10px; color:var(--text-muted);">Uç nokta URL'si doğrudan yedekleme klasörünü hedeflemelidir (sonunda / olmalıdır).</span>
+                  </div>
+                  
+                  <div class="settings-row">
+                    <label for="sync-webdav-username">WebDAV Kullanıcı Adı</label>
+                    <input type="text" id="sync-webdav-username" class="auth-input" placeholder="Kullanıcı adınız">
+                  </div>
+
+                  <div class="settings-row">
+                    <label for="sync-webdav-password">WebDAV Şifresi / Uygulama Parolası</label>
+                    <input type="password" id="sync-webdav-password" class="auth-input" placeholder="Uygulama parolanız veya şifreniz">
+                  </div>
+
+                  <div class="settings-actions" style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 8px;">
+                    <button class="btn btn-primary" id="sync-webdav-push-btn">
+                      <i data-lucide="upload-cloud"></i> WebDAV Sunucusuna Şimdi Yedekle
+                    </button>
+                    <button class="btn btn-secondary" id="sync-webdav-test-btn">
+                      <i data-lucide="check-circle"></i> Bağlantıyı Sına
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Zamanlayıcı Ayarları Kartı -->
+            <div class="settings-card" id="scheduler-backup-card" style="margin-top: 4px;">
+              <h4>Zamanlanmış Otomatik Yedekleme</h4>
+              <p class="settings-desc">Belgelerinizin Google Drive veya WebDAV üzerine düzenli aralıklarla yedeklenmesini planlayın (Bu işlem sadece uygulama tarayıcıda açıkken tetiklenir).</p>
+              
+              <div class="settings-grid" style="margin-top: 4px; display:flex; flex-direction:column; gap:12px;">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                  <div class="settings-row" style="flex:1; min-width:140px;">
+                    <label for="backup-frequency">Yedekleme Sıklığı</label>
+                    <select id="backup-frequency" class="settings-select" style="padding:10px;">
+                      <option value="off">Kapalı</option>
+                      <option value="hourly">Saatlik</option>
+                      <option value="daily">Günlük</option>
+                      <option value="weekly">Haftalık</option>
+                    </select>
+                  </div>
+
+                  <div class="settings-row" id="backup-time-wrapper" style="flex:1; min-width:140px; display:none;">
+                    <label for="backup-time">Yedekleme Saati</label>
+                    <input type="time" id="backup-time" class="auth-input" style="padding: 8px 10px;">
+                  </div>
+
+                  <div class="settings-row" id="backup-day-wrapper" style="flex:1; min-width:140px; display:none;">
+                    <label for="backup-day">Yedekleme Günü</label>
+                    <select id="backup-day" class="settings-select" style="padding:10px;">
+                      <option value="1">Pazartesi</option>
+                      <option value="2">Salı</option>
+                      <option value="3">Çarşamba</option>
+                      <option value="4">Perşembe</option>
+                      <option value="5">Cuma</option>
+                      <option value="6">Cumartesi</option>
+                      <option value="0">Pazar</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div class="settings-actions" style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 8px;">
-                  <button class="btn btn-primary" id="sync-push-btn">
-                    <i data-lucide="upload"></i> Buluta Gönder (Push)
+                  <button class="btn btn-primary" id="backup-scheduler-save-btn">
+                    <i data-lucide="save"></i> Zamanlayıcıyı Kaydet
                   </button>
-                  <button class="btn btn-secondary" id="sync-pull-btn">
-                    <i data-lucide="download"></i> Buluttan Çek (Pull)
-                  </button>
-                  <button class="btn btn-warning" id="sync-disconnect-btn" style="background-color:rgba(244, 63, 94, 0.1); border-color:var(--danger); color:var(--danger); margin-left:auto;">
-                    Bağlantıyı Kes
-                  </button>
+                  <span id="scheduler-status-text" style="font-size:11.5px; color:var(--text-muted); display:flex; align-items:center; margin-left:10px; font-weight:500;"></span>
                 </div>
-                
-                <div id="sync-status-message" style="font-size: 11px; margin-top: 4px; display: none;"></div>
               </div>
             </div>
+
+            <!-- Genel Durum Mesajı -->
+            <div id="sync-status-message" style="font-size: 11px; margin-top: 4px; display: none; padding: 10px 12px; border-radius: 8px; font-weight: 500;"></div>
           </div>
 
           <!-- Tab 7: E-posta Ayarları (Email Settings) -->

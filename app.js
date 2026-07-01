@@ -542,6 +542,15 @@ async function startApplication() {
     console.error("Bulut eşitleme başlatma hatası:", e);
   }
 
+  // Otomatik yedekleme zamanlayıcısını başlat (60 saniyede bir kontrol et)
+  try {
+    setInterval(checkBackupScheduler, 60000);
+    // İlk açılışta hemen bir kez kontrol et (kaçırılan yedekler için)
+    setTimeout(checkBackupScheduler, 5000);
+  } catch (e) {
+    console.error("Zamanlayıcı başlatma hatası:", e);
+  }
+
   // E-posta Ayarlarını Yükle
   try {
     initEmailSettings();
@@ -1460,6 +1469,98 @@ function initEventListeners() {
   if (emailTestBtn) {
     emailTestBtn.addEventListener("click", () => {
       sendNoteViaEmail(true); // true means test email
+    });
+  }
+
+  // Sağlayıcı sekme butonları
+  const providerTabs = document.querySelectorAll("[data-provider]");
+  providerTabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const provider = btn.getAttribute("data-provider");
+      setActiveBackupProvider(provider);
+    });
+  });
+
+  // Google Drive Olayları
+  const gdriveClientInput = document.getElementById("sync-gdrive-client-id");
+  const gdriveApiKeyInput = document.getElementById("sync-gdrive-api-key");
+  const gdriveLoginBtn = document.getElementById("sync-gdrive-login-btn");
+  const gdriveLogoutBtn = document.getElementById("sync-gdrive-logout-btn");
+  const gdrivePushBtn = document.getElementById("sync-gdrive-push-btn");
+
+  if (gdriveClientInput) {
+    gdriveClientInput.addEventListener("input", (e) => {
+      localStorage.setItem("linaren_gdrive_client_id", e.target.value.trim());
+      initGoogleDrive(); // Client ID değişince init et
+    });
+  }
+  if (gdriveApiKeyInput) {
+    gdriveApiKeyInput.addEventListener("input", (e) => {
+      localStorage.setItem("linaren_gdrive_api_key", e.target.value.trim());
+    });
+  }
+  if (gdriveLoginBtn) {
+    gdriveLoginBtn.addEventListener("click", () => {
+      requestGoogleAccessToken();
+    });
+  }
+  if (gdriveLogoutBtn) {
+    gdriveLogoutBtn.addEventListener("click", () => {
+      logoutGoogleDrive();
+    });
+  }
+  if (gdrivePushBtn) {
+    gdrivePushBtn.addEventListener("click", () => {
+      uploadToGoogleDrive(false); // false means manual upload
+    });
+  }
+
+  // WebDAV Olayları
+  const webdavUrlInput = document.getElementById("sync-webdav-url");
+  const webdavUserInput = document.getElementById("sync-webdav-username");
+  const webdavPassInput = document.getElementById("sync-webdav-password");
+  const webdavPushBtn = document.getElementById("sync-webdav-push-btn");
+  const webdavTestBtn = document.getElementById("sync-webdav-test-btn");
+
+  if (webdavUrlInput) {
+    webdavUrlInput.addEventListener("input", (e) => {
+      localStorage.setItem("linaren_webdav_url", e.target.value.trim());
+    });
+  }
+  if (webdavUserInput) {
+    webdavUserInput.addEventListener("input", (e) => {
+      localStorage.setItem("linaren_webdav_username", e.target.value.trim());
+    });
+  }
+  if (webdavPassInput) {
+    webdavPassInput.addEventListener("input", (e) => {
+      localStorage.setItem("linaren_webdav_password", e.target.value.trim());
+    });
+  }
+  if (webdavPushBtn) {
+    webdavPushBtn.addEventListener("click", () => {
+      uploadToWebDAV(false); // false means manual
+    });
+  }
+  if (webdavTestBtn) {
+    webdavTestBtn.addEventListener("click", () => {
+      testWebDAVConnection();
+    });
+  }
+
+  // Zamanlayıcı (Scheduler) Olayları
+  const backupFreqSelect = document.getElementById("backup-frequency");
+  const backupSchedulerSaveBtn = document.getElementById("backup-scheduler-save-btn");
+
+  if (backupFreqSelect) {
+    backupFreqSelect.addEventListener("change", (e) => {
+      updateSchedulerInputsVisibility(e.target.value);
+    });
+  }
+
+  if (backupSchedulerSaveBtn) {
+    backupSchedulerSaveBtn.addEventListener("click", () => {
+      saveBackupSchedulerSettings();
     });
   }
 }
@@ -3368,6 +3469,13 @@ function initCloudSyncUI() {
   if (autoCheck) autoCheck.checked = autoSync;
 
   updateSyncUIState();
+
+  try {
+    initMultiCloudUI();
+    initBackupSchedulerUI();
+  } catch (e) {
+    console.error("Çoklu bulut arayüz başlatma hatası:", e);
+  }
 }
 
 function updateSyncUIState() {
@@ -3854,6 +3962,507 @@ async function sendNoteViaEmail(isTest = false) {
       } else {
         alert(`E-posta gönderimi başarısız oldu: ${err.message || err}`);
       }
+    }
+  }
+}
+
+// =========================================================================
+// 10. ÇOKLU BULUT YEDEKLEME & ZAMANLAYICI SİSTEMİ (GDrive, WebDAV & Scheduler)
+// =========================================================================
+
+function setActiveBackupProvider(provider) {
+  const providers = ["gist", "gdrive", "webdav"];
+  const activeProvider = providers.includes(provider) ? provider : "gist";
+  localStorage.setItem("linaren_active_backup_provider", activeProvider);
+
+  // Sekme butonlarını güncelle
+  providers.forEach(p => {
+    const btn = document.getElementById(`provider-tab-${p}`);
+    const panel = document.getElementById(`panel-sync-${p}`);
+    if (btn) {
+      if (p === activeProvider) {
+        btn.style.background = "var(--accent)";
+        btn.style.color = "#ffffff";
+      } else {
+        btn.style.background = "transparent";
+        btn.style.color = "var(--text-secondary)";
+      }
+    }
+    if (panel) {
+      panel.style.display = p === activeProvider ? "block" : "none";
+    }
+  });
+
+  // Google Drive ise ve Client ID varsa init et
+  if (activeProvider === "gdrive") {
+    initGoogleDrive();
+    updateGDriveUI();
+  }
+  
+  // Zamanlayıcı ayarlarındaki aktif durum metnini güncelle
+  updateBackupSchedulerUI();
+}
+
+function initMultiCloudUI() {
+  const activeProvider = localStorage.getItem("linaren_active_backup_provider") || "gist";
+  setActiveBackupProvider(activeProvider);
+
+  // Google Drive input değerlerini yükle
+  const gdriveClientId = localStorage.getItem("linaren_gdrive_client_id") || "";
+  const gdriveApiKey = localStorage.getItem("linaren_gdrive_api_key") || "";
+  const gdriveClientInput = document.getElementById("sync-gdrive-client-id");
+  const gdriveApiKeyInput = document.getElementById("sync-gdrive-api-key");
+  
+  if (gdriveClientInput) gdriveClientInput.value = gdriveClientId;
+  if (gdriveApiKeyInput) gdriveApiKeyInput.value = gdriveApiKey;
+
+  // WebDAV input değerlerini yükle
+  const webdavUrl = localStorage.getItem("linaren_webdav_url") || "";
+  const webdavUser = localStorage.getItem("linaren_webdav_username") || "";
+  const webdavPass = localStorage.getItem("linaren_webdav_password") || "";
+  const webdavUrlInput = document.getElementById("sync-webdav-url");
+  const webdavUserInput = document.getElementById("sync-webdav-username");
+  const webdavPassInput = document.getElementById("sync-webdav-password");
+
+  if (webdavUrlInput) webdavUrlInput.value = webdavUrl;
+  if (webdavUserInput) webdavUserInput.value = webdavUser;
+  if (webdavPassInput) webdavPassInput.value = webdavPass;
+}
+
+let tokenClient = null;
+let gdriveAccessToken = localStorage.getItem("linaren_gdrive_token") || null;
+
+function initGoogleDrive() {
+  const clientId = localStorage.getItem("linaren_gdrive_client_id");
+  if (!clientId || typeof google === "undefined" || !google.accounts) return;
+  
+  try {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: (resp) => {
+        if (resp.error !== undefined) {
+          console.error("Google login error:", resp);
+          showSyncStatus("Google giriş hatası: " + resp.error, "error");
+          return;
+        }
+        gdriveAccessToken = resp.access_token;
+        localStorage.setItem("linaren_gdrive_token", gdriveAccessToken);
+        localStorage.setItem("linaren_gdrive_token_expires", Date.now() + (resp.expires_in * 1000));
+        updateGDriveUI();
+        showSyncStatus("Google Drive başarıyla bağlandı!", "success");
+      },
+    });
+  } catch (e) {
+    console.error("GIS initClient hatası:", e);
+  }
+}
+
+function requestGoogleAccessToken(callback) {
+  if (!tokenClient) {
+    initGoogleDrive();
+  }
+  if (!tokenClient) {
+    alert("Lütfen önce geçerli bir Google Client ID (İstemci Kimliği) girin ve kaydedin.");
+    return;
+  }
+  
+  if (callback) {
+    tokenClient.callback = (resp) => {
+      if (resp.error !== undefined) {
+        console.error(resp);
+        showSyncStatus("Google yetkilendirme hatası.", "error");
+        return;
+      }
+      gdriveAccessToken = resp.access_token;
+      localStorage.setItem("linaren_gdrive_token", gdriveAccessToken);
+      localStorage.setItem("linaren_gdrive_token_expires", Date.now() + (resp.expires_in * 1000));
+      updateGDriveUI();
+      callback();
+    };
+  }
+  
+  const tokenExpires = parseInt(localStorage.getItem("linaren_gdrive_token_expires") || "0", 10);
+  const isExpired = Date.now() > tokenExpires;
+
+  if (gdriveAccessToken && !isExpired) {
+    if (callback) callback();
+  } else {
+    tokenClient.requestAccessToken({ prompt: gdriveAccessToken ? '' : 'consent' });
+  }
+}
+
+function logoutGoogleDrive() {
+  gdriveAccessToken = null;
+  localStorage.removeItem("linaren_gdrive_token");
+  localStorage.removeItem("linaren_gdrive_token_expires");
+  updateGDriveUI();
+  showSyncStatus("Google Drive bağlantısı kesildi.", "info");
+}
+
+function updateGDriveUI() {
+  const loginBtn = document.getElementById("sync-gdrive-login-btn");
+  const logoutBtn = document.getElementById("sync-gdrive-logout-btn");
+  const statusDot = document.getElementById("gdrive-status-dot");
+  const statusText = document.getElementById("gdrive-login-status");
+  const actionsDiv = document.getElementById("gdrive-actions");
+
+  const tokenExpires = parseInt(localStorage.getItem("linaren_gdrive_token_expires") || "0", 10);
+  const isExpired = Date.now() > tokenExpires;
+  const isConnected = !!gdriveAccessToken && !isExpired;
+
+  if (isConnected) {
+    if (loginBtn) loginBtn.style.display = "none";
+    if (logoutBtn) logoutBtn.style.display = "block";
+    if (statusDot) statusDot.style.background = "var(--success)";
+    if (statusText) statusText.innerHTML = `<span style="width:8px; height:8px; border-radius:50%; background:var(--success); display:inline-block;" id="gdrive-status-dot"></span> Bağlandı`;
+    if (actionsDiv) actionsDiv.style.display = "block";
+  } else {
+    if (loginBtn) loginBtn.style.display = "block";
+    if (logoutBtn) logoutBtn.style.display = "none";
+    if (statusDot) statusDot.style.background = "var(--danger)";
+    if (statusText) statusText.innerHTML = `<span style="width:8px; height:8px; border-radius:50%; background:var(--danger); display:inline-block;" id="gdrive-status-dot"></span> Bağlı Değil`;
+    if (actionsDiv) actionsDiv.style.display = "none";
+  }
+}
+
+async function uploadToGoogleDrive(isScheduled = false) {
+  const clientId = localStorage.getItem("linaren_gdrive_client_id");
+
+  if (!clientId) {
+    if (!isScheduled) alert("Lütfen önce Google Client ID girin.");
+    return;
+  }
+
+  requestGoogleAccessToken(async () => {
+    try {
+      showSyncStatus("Google Drive yedeklemesi başlatılıyor...", "info");
+
+      let folderId = null;
+      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='LinareN_Backups' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      
+      const searchResp = await fetch(searchUrl, {
+        headers: {
+          "Authorization": `Bearer ${gdriveAccessToken}`,
+          "Accept": "application/json"
+        }
+      });
+
+      if (!searchResp.ok) throw new Error("Klasör sorgulanamadı.");
+      const searchData = await searchResp.json();
+      
+      if (searchData.files && searchData.files.length > 0) {
+        folderId = searchData.files[0].id;
+      } else {
+        showSyncStatus("Yedek klasörü oluşturuluyor...", "info");
+        const createFolderResp = await fetch("https://www.googleapis.com/drive/v3/files", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${gdriveAccessToken}`,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({
+            name: "LinareN_Backups",
+            mimeType: "application/vnd.google-apps.folder"
+          })
+        });
+
+        if (!createFolderResp.ok) throw new Error("Yedek klasörü oluşturulamadı.");
+        const folderData = await createFolderResp.json();
+        folderId = folderData.id;
+      }
+
+      const backupObj = {
+        clientLastUpdated: Date.now(),
+        pages: pages,
+        folders: folders
+      };
+
+      const backupContent = JSON.stringify(backupObj, null, 2);
+      const fileName = `linaren_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+
+      const metadata = {
+        name: fileName,
+        parents: [folderId],
+        mimeType: "application/json"
+      };
+
+      const boundary = "linaren_boundary_marker";
+      let body = "";
+      body += `--${boundary}\r\n`;
+      body += `Content-Type: application/json; charset=UTF-8\r\n\r\n`;
+      body += `${JSON.stringify(metadata)}\r\n`;
+      body += `--${boundary}\r\n`;
+      body += `Content-Type: application/json\r\n\r\n`;
+      body += `${backupContent}\r\n`;
+      body += `--${boundary}--`;
+
+      const uploadResp = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${gdriveAccessToken}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`
+        },
+        body: body
+      });
+
+      if (!uploadResp.ok) throw new Error("Yedek dosyası yüklenemedi.");
+
+      localStorage.setItem("linaren_last_drive_backup", Date.now().toString());
+      updateBackupSchedulerUI();
+      showSyncStatus("Google Drive yedeklemesi başarıyla tamamlandı!", "success");
+      
+      if (!isScheduled) {
+        alert("Yedek dosyanız Google Drive'da 'LinareN_Backups' klasörüne başarıyla yüklendi!");
+      }
+    } catch (err) {
+      console.error(err);
+      showSyncStatus("Google Drive yedekleme hatası: " + err.message, "error");
+      if (!isScheduled) {
+        alert("Google Drive yedeklemesi başarısız oldu: " + err.message);
+      }
+    }
+  });
+}
+
+async function uploadToWebDAV(isScheduled = false) {
+  const url = localStorage.getItem("linaren_webdav_url");
+  const user = localStorage.getItem("linaren_webdav_username");
+  const pass = localStorage.getItem("linaren_webdav_password");
+
+  if (!url || !user || !pass) {
+    if (!isScheduled) alert("Lütfen önce WebDAV bağlantı ayarlarını doldurun.");
+    return;
+  }
+
+  showSyncStatus("WebDAV yedeklemesi başlatılıyor...", "info");
+
+  const backupObj = {
+    clientLastUpdated: Date.now(),
+    pages: pages,
+    folders: folders
+  };
+
+  const backupContent = JSON.stringify(backupObj, null, 2);
+  const fileName = `linaren_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  
+  let targetUrl = url;
+  if (!targetUrl.endsWith("/")) {
+    targetUrl += "/";
+  }
+  targetUrl += fileName;
+
+  try {
+    const authHeader = "Basic " + btoa(unescape(encodeURIComponent(user + ":" + pass)));
+    
+    const response = await fetch(targetUrl, {
+      method: "PUT",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json; charset=utf-8"
+      },
+      body: backupContent
+    });
+
+    if (!response.ok) {
+      throw new Error("HTTP Hata Kodu: " + response.status);
+    }
+
+    localStorage.setItem("linaren_last_drive_backup", Date.now().toString());
+    updateBackupSchedulerUI();
+    showSyncStatus("WebDAV yedeklemesi başarıyla tamamlandı!", "success");
+    
+    if (!isScheduled) {
+      alert("Yedek dosyanız WebDAV sunucusuna başarıyla yüklendi!");
+    }
+  } catch (err) {
+    console.error(err);
+    showSyncStatus("WebDAV yedekleme hatası: " + err.message, "error");
+    if (!isScheduled) {
+      alert("WebDAV yedeklemesi başarısız oldu: " + err.message);
+    }
+  }
+}
+
+async function testWebDAVConnection() {
+  const url = localStorage.getItem("linaren_webdav_url");
+  const user = localStorage.getItem("linaren_webdav_username");
+  const pass = localStorage.getItem("linaren_webdav_password");
+
+  if (!url || !user || !pass) {
+    alert("Lütfen önce tüm WebDAV alanlarını doldurun.");
+    return;
+  }
+
+  showSyncStatus("WebDAV bağlantısı test ediliyor...", "info");
+  
+  let targetUrl = url;
+  if (!targetUrl.endsWith("/")) {
+    targetUrl += "/";
+  }
+  targetUrl += "linaren_connection_test.txt";
+
+  try {
+    const authHeader = "Basic " + btoa(unescape(encodeURIComponent(user + ":" + pass)));
+    
+    const response = await fetch(targetUrl, {
+      method: "PUT",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      body: "LinareN WebDAV Connection Test"
+    });
+
+    if (response.ok) {
+      showSyncStatus("WebDAV bağlantısı başarılı!", "success");
+      alert("Tebrikler! WebDAV sunucusuna bağlantı başarıyla sağlandı ve yazma yetkisi doğrulandı.");
+      
+      fetch(targetUrl, {
+        method: "DELETE",
+        headers: {
+          "Authorization": authHeader
+        }
+      }).catch(() => {});
+    } else {
+      throw new Error("HTTP Hata Kodu: " + response.status);
+    }
+  } catch (err) {
+    console.error(err);
+    showSyncStatus("WebDAV bağlantı testi başarısız: " + err.message, "error");
+    alert("WebDAV bağlantı testi başarısız oldu: " + err.message);
+  }
+}
+
+function initBackupSchedulerUI() {
+  const freq = localStorage.getItem("linaren_backup_frequency") || "off";
+  const time = localStorage.getItem("linaren_backup_time") || "00:00";
+  const day = localStorage.getItem("linaren_backup_day") || "1";
+
+  const backupFreqSelect = document.getElementById("backup-frequency");
+  const backupTimeInput = document.getElementById("backup-time");
+  const backupDaySelect = document.getElementById("backup-day");
+
+  if (backupFreqSelect) backupFreqSelect.value = freq;
+  if (backupTimeInput) backupTimeInput.value = time;
+  if (backupDaySelect) backupDaySelect.value = day;
+
+  updateSchedulerInputsVisibility(freq);
+  updateBackupSchedulerUI();
+}
+
+function updateSchedulerInputsVisibility(freq) {
+  const timeWrapper = document.getElementById("backup-time-wrapper");
+  const dayWrapper = document.getElementById("backup-day-wrapper");
+
+  if (freq === "off" || freq === "hourly") {
+    if (timeWrapper) timeWrapper.style.display = "none";
+    if (dayWrapper) dayWrapper.style.display = "none";
+  } else if (freq === "daily") {
+    if (timeWrapper) timeWrapper.style.display = "block";
+    if (dayWrapper) dayWrapper.style.display = "none";
+  } else if (freq === "weekly") {
+    if (timeWrapper) timeWrapper.style.display = "block";
+    if (dayWrapper) dayWrapper.style.display = "block";
+  }
+}
+
+function saveBackupSchedulerSettings() {
+  const freq = document.getElementById("backup-frequency")?.value || "off";
+  const time = document.getElementById("backup-time")?.value || "00:00";
+  const day = document.getElementById("backup-day")?.value || "1";
+
+  localStorage.setItem("linaren_backup_frequency", freq);
+  localStorage.setItem("linaren_backup_time", time);
+  localStorage.setItem("linaren_backup_day", day);
+
+  updateBackupSchedulerUI();
+  alert("Otomatik yedekleme zamanlayıcısı ayarları kaydedildi.");
+}
+
+function updateBackupSchedulerUI() {
+  const textContainer = document.getElementById("scheduler-status-text");
+  if (!textContainer) return;
+
+  const freq = localStorage.getItem("linaren_backup_frequency") || "off";
+  const lastBackupStr = localStorage.getItem("linaren_last_drive_backup") || "0";
+  const lastBackup = parseInt(lastBackupStr, 10);
+
+  if (freq === "off") {
+    textContainer.innerHTML = `<span style="color:var(--text-muted);">Durum: Devre Dışı</span>`;
+    return;
+  }
+
+  let lastBackupText = "Hiç yedek alınmadı";
+  if (lastBackup > 0) {
+    lastBackupText = new Date(lastBackup).toLocaleString();
+  }
+
+  let infoText = "";
+  if (freq === "hourly") infoText = "Saatlik";
+  else if (freq === "daily") infoText = `Günlük (${localStorage.getItem("linaren_backup_time")})`;
+  else if (freq === "weekly") {
+    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+    const dVal = parseInt(localStorage.getItem("linaren_backup_day") || "1", 10);
+    infoText = `Haftalık (${dayNames[dVal]} günleri, saat ${localStorage.getItem("linaren_backup_time")})`;
+  }
+
+  textContainer.innerHTML = `<span style="color:var(--success);"><i data-lucide="check" style="width:12px; height:12px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> Aktif (${infoText})</span> <span style="margin-left: 12px; color:var(--text-muted);">Son Yedek: ${lastBackupText}</span>`;
+  safeCreateIcons();
+}
+
+async function checkBackupScheduler() {
+  const freq = localStorage.getItem("linaren_backup_frequency") || "off";
+  if (freq === "off") return;
+
+  const provider = localStorage.getItem("linaren_active_backup_provider") || "gist";
+  if (provider === "gist") {
+    return;
+  }
+
+  const lastBackupStr = localStorage.getItem("linaren_last_drive_backup") || "0";
+  const lastBackup = parseInt(lastBackupStr, 10);
+  const now = Date.now();
+
+  let shouldBackup = false;
+
+  if (freq === "hourly") {
+    if (now - lastBackup >= 3600000) {
+      shouldBackup = true;
+    }
+  } else if (freq === "daily" || freq === "weekly") {
+    const timeVal = localStorage.getItem("linaren_backup_time") || "00:00";
+    const [targetHour, targetMinute] = timeVal.split(":").map(Number);
+    
+    const nowTimeObj = new Date();
+    const currentHour = nowTimeObj.getHours();
+    const currentMinute = nowTimeObj.getMinutes();
+
+    const targetTimeToday = new Date();
+    targetTimeToday.setHours(targetHour, targetMinute, 0, 0);
+
+    const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+
+    if (freq === "daily") {
+      if (nowTimeObj >= targetTimeToday && (now - lastBackup >= MIN_INTERVAL_MS)) {
+        shouldBackup = true;
+      }
+    } else if (freq === "weekly") {
+      const targetDay = parseInt(localStorage.getItem("linaren_backup_day") || "1", 10);
+      const currentDay = nowTimeObj.getDay();
+      if (currentDay === targetDay && nowTimeObj >= targetTimeToday && (now - lastBackup >= MIN_INTERVAL_MS)) {
+        shouldBackup = true;
+      }
+    }
+  }
+
+  if (shouldBackup) {
+    console.log(`LinareN Scheduler: Zamanlanmış yedekleme tetikleniyor. Sağlayıcı: ${provider}`);
+    if (provider === "gdrive") {
+      uploadToGoogleDrive(true);
+    } else if (provider === "webdav") {
+      uploadToWebDAV(true);
     }
   }
 }
