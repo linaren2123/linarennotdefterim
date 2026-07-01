@@ -813,6 +813,8 @@ async function initDatabaseAndLoad() {
   if (!folders || !Array.isArray(folders)) {
     folders = [];
   }
+  pages = pages.filter(p => p !== null && p !== undefined);
+  folders = folders.filter(f => f !== null && f !== undefined);
 
   // Çöp Kutusu Otomatik Temizleme (30 Gün Geçenleri Sil)
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -889,6 +891,8 @@ async function syncToIndexedDB() {
 // ÇİFT KATMANLI GÜVENLİ VE ŞİFRELİ VERİ KAYDETME
 async function saveData() {
   try {
+    pages = pages.filter(p => p !== null && p !== undefined);
+    folders = folders.filter(f => f !== null && f !== undefined);
     // RAM'de açık şifreli dosyaları disk için şifrelenmiş klon olarak kaydederiz
     const pagesClone = JSON.parse(JSON.stringify(pages));
     pagesClone.forEach(p => {
@@ -1698,23 +1702,27 @@ function renderSidebar() {
   elements.favoritesList.innerHTML = "";
   elements.foldersList.innerHTML = "";
 
-  const activePages = pages.filter(p => !p.deleted);
-  const starredPages = activePages.filter(p => p.starred);
+  const activePages = pages.filter(p => p && !p.deleted);
+  const starredPages = activePages.filter(p => p && p.starred);
 
   // 1. Favori Sayfalar
   starredPages.forEach(page => {
-    const li = createSidebarPageItem(page);
-    elements.favoritesList.appendChild(li);
+    if (page) {
+      const li = createSidebarPageItem(page);
+      elements.favoritesList.appendChild(li);
+    }
   });
 
   // 2. Klasörler Listesi
   folders.forEach(folder => {
-    const folderLi = createSidebarFolderItem(folder, activePages);
-    elements.foldersList.appendChild(folderLi);
+    if (folder) {
+      const folderLi = createSidebarFolderItem(folder, activePages);
+      elements.foldersList.appendChild(folderLi);
+    }
   });
 
   // 3. Kök Seviyedeki (Klasörsüz) Belgeler Listesi
-  const rootPages = activePages.filter(p => !p.folderId);
+  const rootPages = activePages.filter(p => p && !p.folderId);
   if (rootPages.length === 0) {
     elements.pagesList.innerHTML = `<li class="page-item" style="color:var(--text-muted); cursor:default; justify-content:center; font-size:12px;">Sayfa bulunamadı</li>`;
   } else {
@@ -1730,6 +1738,7 @@ function renderSidebar() {
 
 // YAN MENÜ KLASÖR ÖĞESİ
 function createSidebarFolderItem(folder, activePages) {
+  if (!folder) return document.createElement("li");
   const li = document.createElement("li");
   li.className = `folder-item ${openFolders.has(folder.id) ? 'open' : ''}`;
   li.dataset.id = folder.id;
@@ -1835,6 +1844,7 @@ function createSidebarFolderItem(folder, activePages) {
 
 // YAN MENÜ BELGE ÖĞESİ
 function createSidebarPageItem(page) {
+  if (!page) return document.createElement("li");
   const li = document.createElement("li");
   li.className = `page-item ${page.id === currentPageId ? 'active' : ''} ${page.starred ? 'starred' : ''}`;
   li.dataset.id = page.id;
