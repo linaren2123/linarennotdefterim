@@ -156,7 +156,9 @@ function safeCreateIcons() {
     "unlock": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`,
     "cloud": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.42-1.04-1.37-3.5-4-3.5a5.5 5.5 0 0 0-5.5 5.5c-1.39.26-2.5 1.55-2.5 3A3.5 3.5 0 0 0 7.5 19z"/></svg>`,
     "refresh-cw": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`,
-    "mail": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`
+    "mail": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`,
+    "mic": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
+    "bell": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0Z"/></svg>`
   };
 
   const iconElements = document.querySelectorAll("[data-lucide]");
@@ -550,6 +552,14 @@ async function startApplication() {
     setTimeout(checkBackupScheduler, 5000);
   } catch (e) {
     console.error("Zamanlayıcı başlatma hatası:", e);
+  }
+
+  // Hatırlatıcı kontrol motorunu başlat (30 saniyede bir kontrol et)
+  try {
+    setInterval(checkRemindersTick, 30000);
+    setTimeout(checkRemindersTick, 6000);
+  } catch (e) {
+    console.error("Hatırlatıcı motoru başlatma hatası:", e);
   }
 
   // E-posta Ayarlarını Yükle
@@ -964,6 +974,23 @@ function initEventListeners() {
     if (tbarColorDropdown && tbarBtnColor && !tbarBtnColor.contains(e.target) && !tbarColorDropdown.contains(e.target)) {
       tbarColorDropdown.classList.remove("open");
     }
+
+    // Slash komut menüsünü dışarı tıklandığında kapat
+    const slashMenu = document.getElementById("slash-commands-menu");
+    if (slashMenu && !slashMenu.contains(e.target) && !elements.editorBody.contains(e.target)) {
+      closeSlashMenu();
+    }
+
+    // Wiki-link autocomplete menüsünü dışarı tıklandığında kapat
+    const wikiMenu = document.getElementById("wiki-autocomplete");
+    if (wikiMenu && !wikiMenu.contains(e.target) && !elements.editorBody.contains(e.target)) {
+      if (typeof closeWikiAutocomplete === "function") {
+        closeWikiAutocomplete();
+      } else {
+        wikiMenu.style.display = "none";
+        autocompleteActive = false;
+      }
+    }
   });
 
   // İkon Seçici Tetikleme
@@ -1141,6 +1168,7 @@ function initEventListeners() {
   elements.editorBody.addEventListener("keydown", (e) => {
     handleMarkdownShortcuts(e);
     handleWikiLinkTrigger(e);
+    handleSlashCommandTrigger(e);
   });
 
   // Zen Modu Klavye Kısayolu (Ctrl+Shift+Z)
@@ -1611,6 +1639,45 @@ function initEventListeners() {
   if (backupSchedulerSaveBtn) {
     backupSchedulerSaveBtn.addEventListener("click", () => {
       saveBackupSchedulerSettings();
+    });
+  }
+
+  // Kök sayfa listesi için sürükle-bırak olayları
+  if (elements.pagesList) {
+    elements.pagesList.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    elements.pagesList.addEventListener("dragenter", (e) => {
+      e.preventDefault();
+      elements.pagesList.classList.add("drag-over");
+    });
+    elements.pagesList.addEventListener("dragleave", () => {
+      elements.pagesList.classList.remove("drag-over");
+    });
+    elements.pagesList.addEventListener("drop", (e) => {
+      e.preventDefault();
+      elements.pagesList.classList.remove("drag-over");
+      const pageId = e.dataTransfer.getData("text/plain");
+      if (pageId) {
+        movePageToFolder(pageId, ""); // Klasör bağını çöz, köke taşı
+      }
+    });
+  }
+
+  // Dikte (Speech-to-Text) araç çubuğu olayı
+  const speechBtn = document.getElementById("tbar-speech");
+  if (speechBtn) {
+    speechBtn.addEventListener("click", () => {
+      toggleSpeechRecognition();
+    });
+  }
+
+  // Hatırlatıcı zaman girdisi olayı
+  const reminderInput = document.getElementById("status-reminder-input");
+  if (reminderInput) {
+    reminderInput.addEventListener("change", (e) => {
+      saveReminderSetting(e.target.value);
     });
   }
 }
@@ -2143,6 +2210,13 @@ function selectPage(pageId) {
   // Kelime sayacı ve backlinks listesini güncelle
   updateStatusBar();
   updateBacklinks();
+  
+  // Hatırlatıcı değerini yükle
+  try {
+    loadReminderUI(pageId);
+  } catch (e) {
+    console.error("Hatırlatıcı yükleme hatası:", e);
+  }
 
   // Açık otomatik arama pencerelerini kapat
   const autoCmp = document.getElementById("wiki-autocomplete");
@@ -4568,13 +4642,339 @@ async function checkBackupScheduler() {
     }
   }
 
-  if (shouldBackup) {
-    console.log(`LinareN Scheduler: Zamanlanmış yedekleme tetikleniyor. Sağlayıcı: ${provider}`);
-    if (provider === "gdrive") {
-      uploadToGoogleDrive(true);
-    } else if (provider === "webdav") {
-      uploadToWebDAV(true);
     }
   }
 }
+
+// =========================================================================
+// 11. SESLİ DIKTE, NOT HATIRLATICILARI & SLASH KOMUTLARI MOTORLARI
+// =========================================================================
+
+// --- A. SESLİ DIKTE (SPEECH-TO-TEXT) ---
+let speechRecognition = null;
+let isSpeechRecording = false;
+
+function toggleSpeechRecognition() {
+  const btn = document.getElementById("tbar-speech");
+  if (!btn) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert("Tarayıcınız ses tanıma (Speech Recognition) özelliğini desteklemiyor. Lütfen Google Chrome veya Microsoft Edge kullanın.");
+    return;
+  }
+
+  if (isSpeechRecording) {
+    if (speechRecognition) {
+      speechRecognition.stop();
+    }
+    return;
+  }
+
+  isSpeechRecording = true;
+  btn.classList.add("recording");
+  btn.title = "Dikte Ediliyor... Durdurmak için tıklayın";
+
+  speechRecognition = new SpeechRecognition();
+  speechRecognition.lang = "tr-TR";
+  speechRecognition.continuous = true;
+  speechRecognition.interimResults = false;
+
+  speechRecognition.onresult = (e) => {
+    const result = e.results[e.results.length - 1][0].transcript;
+    if (result) {
+      insertTextAtCaret(result + " ");
+      const event = new Event('input', { bubbles: true });
+      elements.editorBody.dispatchEvent(event);
+    }
+  };
+
+  speechRecognition.onerror = (e) => {
+    console.error("Speech Recognition Error:", e);
+    stopSpeechUI();
+  };
+
+  speechRecognition.onend = () => {
+    stopSpeechUI();
+  };
+
+  try {
+    speechRecognition.start();
+  } catch (err) {
+    console.error(err);
+    stopSpeechUI();
+  }
+}
+
+function stopSpeechUI() {
+  isSpeechRecording = false;
+  const btn = document.getElementById("tbar-speech");
+  if (btn) {
+    btn.classList.remove("recording");
+    btn.title = "Sesle Yazma (Dikte)";
+  }
+}
+
+function insertTextAtCaret(text) {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return;
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const textNode = document.createTextNode(text);
+  range.insertNode(textNode);
+  
+  range.setStartAfter(textNode);
+  range.setEndAfter(textNode);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+// --- B. ZAMAN AYARLI NOT HATIRLATICILARI ---
+function loadReminderUI(pageId) {
+  const page = pages.find(p => p.id === pageId);
+  const reminderInput = document.getElementById("status-reminder-input");
+  if (!reminderInput) return;
+
+  if (page && page.reminderAt) {
+    const dateObj = new Date(page.reminderAt);
+    const timezoneOffset = dateObj.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(dateObj.getTime() - timezoneOffset)).toISOString().slice(0, 16);
+    reminderInput.value = localISOTime;
+    reminderInput.title = `Hatırlatıcı kuruldu: ${dateObj.toLocaleString()}`;
+    
+    const bellIcon = reminderInput.previousElementSibling;
+    if (bellIcon) {
+      bellIcon.style.color = "var(--accent)";
+      bellIcon.style.filter = "drop-shadow(0 0 4px var(--accent))";
+    }
+  } else {
+    reminderInput.value = "";
+    reminderInput.title = "Hatırlatıcı Ayarla";
+    
+    const bellIcon = reminderInput.previousElementSibling;
+    if (bellIcon) {
+      bellIcon.style.color = "var(--text-secondary)";
+      bellIcon.style.filter = "none";
+    }
+  }
+}
+
+function saveReminderSetting(dateTimeString) {
+  const page = pages.find(p => p.id === currentPageId);
+  if (!page) return;
+
+  const bellIcon = document.querySelector(".status-reminder-wrapper i");
+
+  if (dateTimeString) {
+    const reminderTime = new Date(dateTimeString).getTime();
+    if (reminderTime <= Date.now()) {
+      alert("Geçmiş bir zamana hatırlatıcı kuramazsınız.");
+      const reminderInput = document.getElementById("status-reminder-input");
+      if (reminderInput) reminderInput.value = "";
+      return;
+    }
+
+    page.reminderAt = reminderTime;
+    saveData();
+    
+    if (bellIcon) {
+      bellIcon.style.color = "var(--accent)";
+      bellIcon.style.filter = "drop-shadow(0 0 4px var(--accent))";
+    }
+
+    if (typeof Notification !== "undefined") {
+      if (Notification.permission === "default") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            console.log("Bildirim izni verildi.");
+          }
+        });
+      }
+    }
+  } else {
+    delete page.reminderAt;
+    saveData();
+    
+    if (bellIcon) {
+      bellIcon.style.color = "var(--text-secondary)";
+      bellIcon.style.filter = "none";
+    }
+  }
+}
+
+function checkRemindersTick() {
+  const now = Date.now();
+  let reminderTriggered = false;
+
+  pages.forEach(page => {
+    if (page.reminderAt && !page.deleted && now >= page.reminderAt) {
+      reminderTriggered = true;
+      const title = page.title || "Başlıksız Belge";
+      
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification("LinareN Hatırlatıcı", {
+          body: `"${title}" belgesi için hatırlatma zamanı geldi!`,
+          icon: "./icon_512.jpg"
+        });
+      }
+
+      alert(`🔔 HATIRLATICI BİLDİRİMİ:\n\n"${title}" belgeniz için kurduğunuz hatırlatıcı süresi doldu.`);
+      delete page.reminderAt;
+    }
+  });
+
+  if (reminderTriggered) {
+    saveData();
+    if (currentPageId) {
+      loadReminderUI(currentPageId);
+    }
+  }
+}
+
+// --- C. NOTION TARZI SLASH (/) KOMUTLARI ---
+let slashMenuActive = false;
+let slashMenuSelectedIdx = 0;
+const slashCommands = [
+  { id: "h1", label: "H1 Başlık", icon: "heading-1", tag: "h1" },
+  { id: "h2", label: "H2 Başlık", icon: "heading-2", tag: "h2" },
+  { id: "bullet", label: "Maddeli Liste", icon: "list", tag: "ul" },
+  { id: "table", label: "Tablo Ekle", icon: "table", tag: "table" },
+  { id: "code", label: "Kod Bloğu", icon: "code", tag: "pre" },
+  { id: "clear", label: "Biçimi Temizle", icon: "trash-2", tag: "clear" }
+];
+
+function openSlashMenu() {
+  const menu = document.getElementById("slash-commands-menu");
+  if (!menu) return;
+
+  slashMenuActive = true;
+  slashMenuSelectedIdx = 0;
+
+  const caretCoords = getCaretCoordinates();
+  menu.style.left = `${caretCoords.left}px`;
+  menu.style.top = `${caretCoords.top + 20}px`;
+  menu.style.display = "flex";
+
+  renderSlashMenu();
+}
+
+function closeSlashMenu() {
+  slashMenuActive = false;
+  const menu = document.getElementById("slash-commands-menu");
+  if (menu) {
+    menu.style.display = "none";
+  }
+}
+
+function renderSlashMenu() {
+  const menu = document.getElementById("slash-commands-menu");
+  if (!menu) return;
+
+  menu.innerHTML = "";
+  slashCommands.forEach((cmd, idx) => {
+    const btn = document.createElement("button");
+    btn.className = `slash-commands-menu-item ${idx === slashMenuSelectedIdx ? 'active' : ''}`;
+    
+    let iconHtml = "";
+    if (cmd.id === "h1") iconHtml = '<span style="font-weight:bold; font-size:12px; width:16px;">H1</span>';
+    else if (cmd.id === "h2") iconHtml = '<span style="font-weight:bold; font-size:12px; width:16px;">H2</span>';
+    else {
+      iconHtml = `<span data-lucide="${cmd.icon}" style="width:14px; height:14px; display:inline-block;"></span>`;
+    }
+
+    btn.innerHTML = `${iconHtml} <span>${cmd.label}</span>`;
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      executeSlashCommand(cmd.id);
+    });
+    menu.appendChild(btn);
+  });
+
+  safeCreateIcons();
+}
+
+function executeSlashCommand(commandId) {
+  document.execCommand("delete", false, null);
+
+  switch (commandId) {
+    case "h1":
+      document.execCommand("formatBlock", false, "<h1>");
+      break;
+    case "h2":
+      document.execCommand("formatBlock", false, "<h2>");
+      break;
+    case "bullet":
+      document.execCommand("insertUnorderedList", false, null);
+      break;
+    case "table":
+      const tableHtml = '<table style="width:100%; border-collapse:collapse; margin:12px 0;"><tr style="border-bottom:2px solid var(--border-color);"><th style="border:1px solid var(--border-color); padding:8px; background:var(--bg-primary);">Başlık 1</th><th style="border:1px solid var(--border-color); padding:8px; background:var(--bg-primary);">Başlık 2</th></tr><tr><td style="border:1px solid var(--border-color); padding:8px;">Hücre 1</td><td style="border:1px solid var(--border-color); padding:8px;">Hücre 2</td></tr></table><p><br></p>';
+      document.execCommand("insertHTML", false, tableHtml);
+      break;
+    case "code":
+      const codeHtml = '<pre style="background:var(--bg-primary); border:1px solid var(--border-color); padding:12px; border-radius:6px; font-family:var(--font-mono); font-size:12px; overflow-x:auto;"><code>// Kodunuzu buraya yazın...</code></pre><p><br></p>';
+      document.execCommand("insertHTML", false, codeHtml);
+      break;
+    case "clear":
+      document.execCommand("removeFormat", false, null);
+      break;
+  }
+
+  const event = new Event('input', { bubbles: true });
+  elements.editorBody.dispatchEvent(event);
+
+  closeSlashMenu();
+}
+
+function handleSlashCommandTrigger(e) {
+  const menu = document.getElementById("slash-commands-menu");
+  if (!menu) return;
+
+  if (slashMenuActive) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      slashMenuSelectedIdx = (slashMenuSelectedIdx + 1) % slashCommands.length;
+      renderSlashMenu();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      slashMenuSelectedIdx = (slashMenuSelectedIdx - 1 + slashCommands.length) % slashCommands.length;
+      renderSlashMenu();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      executeSlashCommand(slashCommands[slashMenuSelectedIdx].id);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeSlashMenu();
+    } else if (e.key === "Backspace") {
+      setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        const range = selection.getRangeAt(0);
+        const start = Math.max(0, range.startOffset - 1);
+        const text = range.startContainer.textContent || "";
+        if (text.substring(start, range.startOffset) !== "/") {
+          closeSlashMenu();
+        }
+      }, 10);
+    }
+    return;
+  }
+
+  if (e.key === "/") {
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      const text = range.startContainer.textContent || "";
+      const offset = range.startOffset;
+
+      const prevChar = offset >= 2 ? text.substring(offset - 2, offset - 1) : "";
+      if (prevChar === "" || prevChar === " " || prevChar === "\n" || prevChar === "\u00a0") {
+        openSlashMenu();
+      }
+    }, 10);
+  }
+}
+
 

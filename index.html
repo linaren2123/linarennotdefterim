@@ -225,6 +225,15 @@
               </div>
             </div>
           </div>
+          <div class="tbar-separator"></div>
+          
+          <!-- SES DIKTE -->
+          <div class="tbar-section">
+            <span class="tbar-section-label">SES</span>
+            <div class="tbar-group">
+              <button class="tbar-btn" id="tbar-speech" title="Sesle Yazma (Dikte)"><i data-lucide="mic"></i></button>
+            </div>
+          </div>
         </div>
 
         <!-- Sayfa Başlığı -->
@@ -250,9 +259,14 @@
         <div class="editor-status-bar" id="editor-status-bar">
           <span id="status-word-count">0 kelime</span>
           <span class="status-separator">•</span>
-          <span id="status-char-count">0  karakter</span>
+          <span id="status-char-count">0 karakter</span>
           <span class="status-separator">•</span>
           <span id="status-read-time">1 dk okuma</span>
+          <span class="status-separator" style="margin-left: auto;">•</span>
+          <div class="status-reminder-wrapper" style="display:flex; align-items:center; gap:6px;">
+            <i data-lucide="bell" style="width:12px; height:12px; color:var(--text-secondary);"></i>
+            <input type="datetime-local" id="status-reminder-input" style="background:transparent; border:none; color:var(--text-secondary); font-size:11px; font-family:var(--font-sans); outline:none; cursor:pointer;" title="Hatırlatıcı Ayarla">
+          </div>
         </div>
       </div>
     </main>
@@ -809,6 +823,11 @@
   <!-- 2. WIKI LINK OTOMATİK TAMAMLAMA POPUP -->
   <div class="wiki-autocomplete" id="wiki-autocomplete" style="display: none;">
     <!-- Sayfa listesi dinamik doldurulur -->
+  </div>
+
+  <!-- NOTION TARZI SLASH KOMUTLARI MENÜSÜ -->
+  <div class="slash-commands-menu" id="slash-commands-menu" style="display: none;">
+    <!-- Komut listesi dinamik doldurulur -->
   </div>
 
   <!-- 3. ZEN MODU YÜZEN ÇIKIŞ BUTONU -->
