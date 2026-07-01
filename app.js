@@ -166,8 +166,9 @@ function safeCreateIcons() {
       el.innerHTML = LOCAL_SVGS[iconName];
       const svg = el.querySelector("svg");
       if (svg) {
-        svg.style.width = "100%";
-        svg.style.height = "100%";
+        // Genişlik ve yüksekliği CSS stylesheet ezebilsin diye nitelik (attribute) olarak atıyoruz
+        svg.setAttribute("width", "16");
+        svg.setAttribute("height", "16");
         svg.style.stroke = "currentColor";
         svg.style.strokeWidth = "2";
       }
