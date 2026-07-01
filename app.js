@@ -2925,11 +2925,28 @@ function handleWikiLinkTrigger(e) {
       const selection = window.getSelection();
       if (!selection.rangeCount) return;
       const range = selection.getRangeAt(0);
-      const text = range.startContainer.textContent || "";
-      const offset = range.startOffset;
       
-      if (offset >= 2 && text.substring(offset - 2, offset) === "[[") {
-        openWikiAutocomplete();
+      let container = range.startContainer;
+      let block = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+      if (block && typeof block.closest === "function") {
+        block = block.closest("p, h1, h2, li, pre, td, th, [contenteditable]");
+      }
+      
+      if (block) {
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(block);
+        preCaretRange.setEnd(range.endContainer, range.endOffset);
+        const textBeforeCaret = preCaretRange.toString();
+        
+        if (textBeforeCaret.endsWith("[[")) {
+          const charBeforeBrackets = textBeforeCaret.length >= 3 
+            ? textBeforeCaret.charAt(textBeforeCaret.length - 3) 
+            : "";
+            
+          if (charBeforeBrackets === "" || charBeforeBrackets === " " || charBeforeBrackets === "\n" || charBeforeBrackets === "\r" || charBeforeBrackets === "\u00a0") {
+            openWikiAutocomplete();
+          }
+        }
       }
     }, 10);
   }
@@ -4868,8 +4885,8 @@ function openSlashMenu() {
   slashMenuSelectedIdx = 0;
 
   const caretCoords = getCaretCoordinates();
-  menu.style.left = `${caretCoords.left}px`;
-  menu.style.top = `${caretCoords.top + 20}px`;
+  menu.style.left = `${caretCoords.x}px`;
+  menu.style.top = `${caretCoords.y + 20}px`;
   menu.style.display = "flex";
 
   renderSlashMenu();
@@ -4967,9 +4984,21 @@ function handleSlashCommandTrigger(e) {
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
         const range = selection.getRangeAt(0);
-        const start = Math.max(0, range.startOffset - 1);
-        const text = range.startContainer.textContent || "";
-        if (text.substring(start, range.startOffset) !== "/") {
+        
+        let container = range.startContainer;
+        let block = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+        if (block && typeof block.closest === "function") {
+          block = block.closest("p, h1, h2, li, pre, td, th, [contenteditable]");
+        }
+        if (block) {
+          const preCaretRange = range.cloneRange();
+          preCaretRange.selectNodeContents(block);
+          preCaretRange.setEnd(range.endContainer, range.endOffset);
+          const textBeforeCaret = preCaretRange.toString();
+          if (!textBeforeCaret.endsWith("/")) {
+            closeSlashMenu();
+          }
+        } else {
           closeSlashMenu();
         }
       }, 10);
@@ -4982,12 +5011,28 @@ function handleSlashCommandTrigger(e) {
       const selection = window.getSelection();
       if (!selection.rangeCount) return;
       const range = selection.getRangeAt(0);
-      const text = range.startContainer.textContent || "";
-      const offset = range.startOffset;
-
-      const prevChar = offset >= 2 ? text.substring(offset - 2, offset - 1) : "";
-      if (prevChar === "" || prevChar === " " || prevChar === "\n" || prevChar === "\u00a0") {
-        openSlashMenu();
+      
+      let container = range.startContainer;
+      let block = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+      if (block && typeof block.closest === "function") {
+        block = block.closest("p, h1, h2, li, pre, td, th, [contenteditable]");
+      }
+      
+      if (block) {
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(block);
+        preCaretRange.setEnd(range.endContainer, range.endOffset);
+        const textBeforeCaret = preCaretRange.toString();
+        
+        if (textBeforeCaret.endsWith("/")) {
+          const charBeforeSlash = textBeforeCaret.length >= 2 
+            ? textBeforeCaret.charAt(textBeforeCaret.length - 2) 
+            : "";
+            
+          if (charBeforeSlash === "" || charBeforeSlash === " " || charBeforeSlash === "\n" || charBeforeSlash === "\r" || charBeforeSlash === "\u00a0") {
+            openSlashMenu();
+          }
+        }
       }
     }, 10);
   }
