@@ -4304,6 +4304,9 @@ async function uploadToGoogleDrive(isScheduled = false) {
       }
 
       localStorage.setItem("linaren_last_drive_backup", Date.now().toString());
+      if (isScheduled) {
+        localStorage.setItem("linaren_last_scheduled_backup", Date.now().toString());
+      }
       updateBackupSchedulerUI();
       showSyncStatus("Google Drive yedeklemesi başarıyla tamamlandı!", "success");
       
@@ -4364,6 +4367,9 @@ async function uploadToWebDAV(isScheduled = false) {
     }
 
     localStorage.setItem("linaren_last_drive_backup", Date.now().toString());
+    if (isScheduled) {
+      localStorage.setItem("linaren_last_scheduled_backup", Date.now().toString());
+    }
     updateBackupSchedulerUI();
     showSyncStatus("WebDAV yedeklemesi başarıyla tamamlandı!", "success");
     
@@ -4471,6 +4477,10 @@ function saveBackupSchedulerSettings() {
   localStorage.setItem("linaren_backup_time", time);
   localStorage.setItem("linaren_backup_day", day);
 
+  // Ayarlar değiştirildiğinde, yeni hedeflenen saat ve günün anında test edilebilmesi/çalışabilmesi için 
+  // zamanlayıcının son otomatik çalışma kaydını sıfırlıyoruz.
+  localStorage.setItem("linaren_last_scheduled_backup", "0");
+
   updateBackupSchedulerUI();
   alert("Otomatik yedekleme zamanlayıcısı ayarları kaydedildi.");
 
@@ -4518,8 +4528,8 @@ async function checkBackupScheduler() {
     return;
   }
 
-  const lastBackupStr = localStorage.getItem("linaren_last_drive_backup") || "0";
-  const lastBackup = parseInt(lastBackupStr, 10);
+  const lastScheduledStr = localStorage.getItem("linaren_last_scheduled_backup") || "0";
+  const lastBackup = parseInt(lastScheduledStr, 10);
   const now = Date.now();
 
   let shouldBackup = false;
