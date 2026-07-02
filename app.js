@@ -5494,8 +5494,10 @@ function adjustPageBreaks() {
     rangeInfo = saveSelectionState(elements.editorBody, savedRange);
   }
 
-  // Editör gövdesini temizle ve yeni sayfa yapraklarını oluştur
-  elements.editorBody.innerHTML = "";
+  // Editör gövdesini temizle (DOM düğümlerini bellekten uçurmadan sadece görsel ağaçtan çıkarıyoruz)
+  while (elements.editorBody.firstChild) {
+    elements.editorBody.removeChild(elements.editorBody.firstChild);
+  }
 
   pagesData.forEach((pageEls, index) => {
     if (index > 0) {
@@ -5526,72 +5528,31 @@ function adjustPageBreaks() {
   }
 }
 
-// Eleman ekleme/çıkarma durumunda imlecin kaymasını önleyen karakter tabanlı durum koruyucuları (DOMException güvenli)
+// Eleman ekleme/çıkarma durumunda imlecin kaymasını önleyen nesne referanslı durum koruyucuları (Hızlı, Hatasız ve Kararlı)
 function saveSelectionState(container, range) {
   if (!container || !range) return null;
   // Seçim alanı editörün içinde değilse hata fırlatılmasını önlemek için pas geçelim
   if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) {
     return null;
   }
-
-  try {
-    const preCaretRange = range.cloneRange();
-    preCaretRange.selectNodeContents(container);
-    preCaretRange.setEnd(range.startContainer, range.startOffset);
-    const startOffset = preCaretRange.toString().length;
-
-    const preCaretEndRange = range.cloneRange();
-    preCaretEndRange.selectNodeContents(container);
-    preCaretEndRange.setEnd(range.endContainer, range.endOffset);
-    const endOffset = preCaretEndRange.toString().length;
-
-    return { startOffset, endOffset };
-  } catch (e) {
-    console.warn("saveSelectionState hata:", e);
-    return null;
-  }
+  return {
+    startContainer: range.startContainer,
+    startOffset: range.startOffset,
+    endContainer: range.endContainer,
+    endOffset: range.endOffset
+  };
 }
 
 function restoreSelectionState(container, info) {
   if (!container || !info) return;
   
   try {
-    let charIndex = 0;
+    const selection = window.getSelection();
     const range = document.createRange();
-    range.setStart(container, 0);
-    range.collapse(true);
-    
-    const nodeQueue = [container];
-    let startFound = false;
-    let endFound = false;
-
-    while (nodeQueue.length > 0) {
-      const node = nodeQueue.shift();
-
-      if (node.nodeType === Node.TEXT_NODE) {
-        const nextCharIndex = charIndex + node.length;
-        
-        if (!startFound && info.startOffset >= charIndex && info.startOffset <= nextCharIndex) {
-          range.setStart(node, info.startOffset - charIndex);
-          startFound = true;
-        }
-        if (!endFound && info.endOffset >= charIndex && info.endOffset <= nextCharIndex) {
-          range.setEnd(node, info.endOffset - charIndex);
-          endFound = true;
-        }
-        charIndex = nextCharIndex;
-      } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("editor-page-break")) {
-        for (let i = node.childNodes.length - 1; i >= 0; i--) {
-          nodeQueue.unshift(node.childNodes[i]);
-        }
-      }
-    }
-
-    if (startFound && endFound) {
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    range.setStart(info.startContainer, info.startOffset);
+    range.setEnd(info.endContainer, info.endOffset);
+    selection.removeAllRanges();
+    selection.addRange(range);
   } catch (e) {
     console.warn("restoreSelectionState hata:", e);
   }
