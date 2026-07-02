@@ -5343,15 +5343,35 @@ function getCurrentEditorContent() {
   return clone.innerHTML;
 }
 
+function collectContentElements() {
+  if (!elements.editorBody) return [];
+  const elementsList = [];
+  const children = Array.from(elements.editorBody.children);
+  
+  children.forEach(child => {
+    if (child.classList.contains("editor-page-break")) {
+      return;
+    }
+    
+    if (child.classList.contains("editor-page-sheet")) {
+      const sheetChildren = Array.from(child.children);
+      sheetChildren.forEach(sc => {
+        if (!sc.classList.contains("editor-page-break") && !sc.classList.contains("editor-page-sheet")) {
+          elementsList.push(sc);
+        }
+      });
+    } else {
+      elementsList.push(child);
+    }
+  });
+  
+  return elementsList;
+}
+
 function splitOverlongParagraphs() {
   if (!elements.editorBody) return false;
   
-  // Önce tüm içerik elemanlarını seç
-  let children = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet > *"));
-  if (children.length === 0) {
-    children = Array.from(elements.editorBody.children);
-  }
-
+  const children = collectContentElements();
   const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
   let modified = false;
 
@@ -5359,7 +5379,7 @@ function splitOverlongParagraphs() {
     if (child.nodeType !== Node.ELEMENT_NODE) return;
     if (child.classList.contains("editor-page-break") || child.classList.contains("editor-page-sheet")) return;
     
-    // Yalnızca P, DIV ve H etiketlerini bölelim (tabloları veya kod bloklarını bölmeyelim)
+    // Yalnızca P, DIV ve H etiketlerini bölelim
     const allowedTags = ["P", "DIV", "H1", "H2", "H3"];
     if (!allowedTags.includes(child.tagName)) return;
 
@@ -5398,17 +5418,12 @@ function adjustPageBreaks() {
   // Aşırı uzun paragrafları otomatik böl
   const didSplit = splitOverlongParagraphs();
   if (didSplit) {
-    // Bölünme işlemi yapıldıysa, tarayıcının DOM boyutlarını güncellemesini bekleyip tekrar tetikleyelim
     setTimeout(adjustPageBreaks, 50);
     return;
   }
 
   // 1. ÖLÇÜM AŞAMASI (BATCH READ-ONLY: Layout thrashing engellemek için)
-  let children = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet > *"));
-  if (children.length === 0) {
-    children = Array.from(elements.editorBody.children);
-  }
-
+  const children = collectContentElements();
   const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
   const pagesData = [];
   let currentPageElements = [];
@@ -5511,57 +5526,74 @@ function adjustPageBreaks() {
   }
 }
 
-// Eleman ekleme/çıkarma durumunda imlecin kaymasını önleyen karakter tabanlı durum koruyucuları
+// Eleman ekleme/çıkarma durumunda imlecin kaymasını önleyen karakter tabanlı durum koruyucuları (DOMException güvenli)
 function saveSelectionState(container, range) {
-  const preCaretRange = range.cloneRange();
-  preCaretRange.selectNodeContents(container);
-  preCaretRange.setEnd(range.startContainer, range.startOffset);
-  const startOffset = preCaretRange.toString().length;
+  if (!container || !range) return null;
+  // Seçim alanı editörün içinde değilse hata fırlatılmasını önlemek için pas geçelim
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) {
+    return null;
+  }
 
-  const preCaretEndRange = range.cloneRange();
-  preCaretEndRange.selectNodeContents(container);
-  preCaretEndRange.setEnd(range.endContainer, range.endOffset);
-  const endOffset = preCaretEndRange.toString().length;
+  try {
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(container);
+    preCaretRange.setEnd(range.startContainer, range.startOffset);
+    const startOffset = preCaretRange.toString().length;
 
-  return { startOffset, endOffset };
+    const preCaretEndRange = range.cloneRange();
+    preCaretEndRange.selectNodeContents(container);
+    preCaretEndRange.setEnd(range.endContainer, range.endOffset);
+    const endOffset = preCaretEndRange.toString().length;
+
+    return { startOffset, endOffset };
+  } catch (e) {
+    console.warn("saveSelectionState hata:", e);
+    return null;
+  }
 }
 
 function restoreSelectionState(container, info) {
-  let charIndex = 0;
-  const range = document.createRange();
-  range.setStart(container, 0);
-  range.collapse(true);
+  if (!container || !info) return;
   
-  const nodeQueue = [container];
-  let startFound = false;
-  let endFound = false;
+  try {
+    let charIndex = 0;
+    const range = document.createRange();
+    range.setStart(container, 0);
+    range.collapse(true);
+    
+    const nodeQueue = [container];
+    let startFound = false;
+    let endFound = false;
 
-  while (nodeQueue.length > 0) {
-    const node = nodeQueue.shift();
+    while (nodeQueue.length > 0) {
+      const node = nodeQueue.shift();
 
-    if (node.nodeType === Node.TEXT_NODE) {
-      const nextCharIndex = charIndex + node.length;
-      
-      if (!startFound && info.startOffset >= charIndex && info.startOffset <= nextCharIndex) {
-        range.setStart(node, info.startOffset - charIndex);
-        startFound = true;
-      }
-      if (!endFound && info.endOffset >= charIndex && info.endOffset <= nextCharIndex) {
-        range.setEnd(node, info.endOffset - charIndex);
-        endFound = true;
-      }
-      charIndex = nextCharIndex;
-    } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("editor-page-break")) {
-      for (let i = node.childNodes.length - 1; i >= 0; i--) {
-        nodeQueue.unshift(node.childNodes[i]);
+      if (node.nodeType === Node.TEXT_NODE) {
+        const nextCharIndex = charIndex + node.length;
+        
+        if (!startFound && info.startOffset >= charIndex && info.startOffset <= nextCharIndex) {
+          range.setStart(node, info.startOffset - charIndex);
+          startFound = true;
+        }
+        if (!endFound && info.endOffset >= charIndex && info.endOffset <= nextCharIndex) {
+          range.setEnd(node, info.endOffset - charIndex);
+          endFound = true;
+        }
+        charIndex = nextCharIndex;
+      } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("editor-page-break")) {
+        for (let i = node.childNodes.length - 1; i >= 0; i--) {
+          nodeQueue.unshift(node.childNodes[i]);
+        }
       }
     }
-  }
 
-  if (startFound && endFound) {
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
+    if (startFound && endFound) {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  } catch (e) {
+    console.warn("restoreSelectionState hata:", e);
   }
 }
 

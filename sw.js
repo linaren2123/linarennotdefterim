@@ -1,4 +1,4 @@
-const CACHE_NAME = "linaren-cache-v7";
+const CACHE_NAME = "linaren-cache-v8";
 const ASSETS = [
   "./",
   "./index.html",
