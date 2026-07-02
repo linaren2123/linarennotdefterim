@@ -1256,6 +1256,27 @@ function initEventListeners() {
     });
   }
 
+  // Not İstatistikleri (Analytics) Açma Düğmesi
+  const analyticsTriggerBtn = document.getElementById("analytics-trigger-btn");
+  const analyticsModal = document.getElementById("analytics-modal");
+  const closeAnalyticsBtn = document.getElementById("close-analytics-modal");
+  if (analyticsTriggerBtn && analyticsModal) {
+    analyticsTriggerBtn.addEventListener("click", () => {
+      updateAnalytics();
+      analyticsModal.classList.add("open");
+    });
+  }
+  if (closeAnalyticsBtn && analyticsModal) {
+    closeAnalyticsBtn.addEventListener("click", () => {
+      analyticsModal.classList.remove("open");
+    });
+  }
+  if (analyticsModal) {
+    analyticsModal.addEventListener("click", (e) => {
+      if (e.target === analyticsModal) analyticsModal.classList.remove("open");
+    });
+  }
+
   // Sürüm Geçmişi Belge Seçimi ve Geri Yükleme
   const histPageSelect = document.getElementById("history-page-select");
   if (histPageSelect) {
@@ -4772,6 +4793,9 @@ function toggleSpeechRecognition() {
   btn.classList.add("recording");
   btn.title = "Dikte Ediliyor... Durdurmak için tıklayın";
 
+  // Mikrofon dalga görselleştirmesini başlat
+  startSpeechWaveAnimation();
+
   speechRecognition = new SpeechRecognition();
   speechRecognition.lang = "tr-TR";
   speechRecognition.continuous = true;
@@ -4810,6 +4834,8 @@ function stopSpeechUI() {
     btn.classList.remove("recording");
     btn.title = "Sesle Yazma (Dikte)";
   }
+  // Mikrofon dalga görselleştirmesini durdur
+  stopSpeechWaveAnimation();
 }
 
 function insertTextAtCaret(text) {
@@ -4933,12 +4959,12 @@ function checkRemindersTick() {
 let slashMenuActive = false;
 let slashMenuSelectedIdx = 0;
 const slashCommands = [
-  { id: "h1", label: "H1 Başlık", icon: "heading-1", tag: "h1" },
-  { id: "h2", label: "H2 Başlık", icon: "heading-2", tag: "h2" },
-  { id: "bullet", label: "Maddeli Liste", icon: "list", tag: "ul" },
-  { id: "table", label: "Tablo Ekle", icon: "table", tag: "table" },
-  { id: "code", label: "Kod Bloğu", icon: "code", tag: "pre" },
-  { id: "clear", label: "Biçimi Temizle", icon: "trash-2", tag: "clear" }
+  { id: "h1", label: "Büyük Başlık (H1)", desc: "En büyük başlığı ekler", icon: "heading-1", tag: "h1" },
+  { id: "h2", label: "Orta Başlık (H2)", desc: "Orta boyutta başlık ekler", icon: "heading-2", tag: "h2" },
+  { id: "bullet", label: "Maddeli Liste", desc: "Sırasız liste başlatır", icon: "list", tag: "ul" },
+  { id: "table", label: "Tablo", desc: "Zengin bir tablo ekler", icon: "table", tag: "table" },
+  { id: "code", label: "Kod Bloğu", desc: "Programlama kod bloğu ekler", icon: "code", tag: "pre" },
+  { id: "clear", label: "Biçimi Temizle", desc: "Seçili metin biçimini kaldırır", icon: "trash-2", tag: "clear" }
 ];
 
 function openSlashMenu() {
@@ -4971,16 +4997,22 @@ function renderSlashMenu() {
   menu.innerHTML = "";
   slashCommands.forEach((cmd, idx) => {
     const btn = document.createElement("button");
-    btn.className = `slash-commands-menu-item ${idx === slashMenuSelectedIdx ? 'active' : ''}`;
+    btn.className = `slash-item ${idx === slashMenuSelectedIdx ? 'active' : ''}`;
     
     let iconHtml = "";
-    if (cmd.id === "h1") iconHtml = '<span style="font-weight:bold; font-size:12px; width:16px;">H1</span>';
-    else if (cmd.id === "h2") iconHtml = '<span style="font-weight:bold; font-size:12px; width:16px;">H2</span>';
+    if (cmd.id === "h1") iconHtml = '<i data-lucide="chevron-up" style="width:14px; height:14px; display:inline-block;"></i>';
+    else if (cmd.id === "h2") iconHtml = '<i data-lucide="chevron-down" style="width:14px; height:14px; display:inline-block;"></i>';
     else {
-      iconHtml = `<span data-lucide="${cmd.icon}" style="width:14px; height:14px; display:inline-block;"></span>`;
+      iconHtml = `<i data-lucide="${cmd.icon}" style="width:14px; height:14px; display:inline-block;"></i>`;
     }
 
-    btn.innerHTML = `${iconHtml} <span>${cmd.label}</span>`;
+    btn.innerHTML = `
+      ${iconHtml}
+      <div class="slash-details">
+        <span class="slash-title">${cmd.label}</span>
+        <span class="slash-desc">${cmd.desc}</span>
+      </div>
+    `;
     btn.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -5541,6 +5573,9 @@ function adjustPageBreaks() {
   if (!selectionRestored) {
     focusFirstPageSheet();
   }
+
+  // Belge gezginini (Outline) güncelle
+  updateOutline();
 }
 
 // İlk sayfa yaprağının ilk paragrafına güvenli odaklanma fonksiyonu
@@ -5602,6 +5637,244 @@ function restoreSelectionState(container, info) {
     selection.addRange(range);
   } catch (e) {
     console.warn("restoreSelectionState hata:", e);
+  }
+}
+
+// -------------------------------------------------------------------------
+// DOKÜMAN GÜÇ PAKETİ FONKSİYONLARI (OUTLINE, ANALYTICS, SPEECH WAVE)
+// -------------------------------------------------------------------------
+
+// 1. DİNAMİK BAŞLIK GEZGİNİ (OUTLINE / TABLE OF CONTENTS)
+function updateOutline() {
+  const panel = document.getElementById("editor-outline-panel");
+  const list = document.getElementById("outline-list");
+  if (!panel || !list) return;
+
+  list.innerHTML = "";
+
+  // Editör yapraklarındaki H1, H2, H3 elemanlarını seçelim
+  const headers = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet h1, .editor-page-sheet h2, .editor-page-sheet h3"));
+
+  if (headers.length === 0) {
+    list.innerHTML = `<li style="font-size:11.5px; color:var(--text-muted); cursor:default; padding:4px 6px;">Başlık bulunamadı</li>`;
+    return;
+  }
+
+  headers.forEach((header, index) => {
+    const li = document.createElement("li");
+    const levelClass = header.tagName.toLowerCase(); // h1, h2, h3
+    li.className = `outline-item ${levelClass}`;
+    li.textContent = header.textContent.trim() || `${header.tagName} Başlık`;
+
+    // Her başlığa tıklanabilir bir kimlik verelim
+    if (!header.id) {
+      header.id = `outline-target-${index}`;
+    }
+
+    li.addEventListener("click", () => {
+      header.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // Görsel geri bildirim için kısa bir an renk değiştirelim
+      li.style.color = "var(--accent)";
+      setTimeout(() => { li.style.color = ""; }, 800);
+    });
+
+    list.appendChild(li);
+  });
+}
+
+// 2. DETAYLI NOT İSTATİSTİKLERİ VE TÜRKÇE OKUNABİLİRLİK ANALİZİ
+function updateAnalytics() {
+  const text = elements.editorBody.innerText || elements.editorBody.textContent || "";
+  const cleanText = text.trim();
+
+  // Kelime ve Karakter Hesaplama
+  let wordCount = 0;
+  if (cleanText) {
+    wordCount = cleanText.split(/\s+/).filter(w => w.length > 0).length;
+  }
+  const charCount = cleanText.length;
+
+  // Cümle Hesaplama (Nokta, soru işareti ve ünlem içeren bitişleri sayar)
+  const sentenceCount = cleanText ? (cleanText.split(/[.!?]+/).filter(s => s.trim().length > 0).length) : 0;
+
+  // Paragraf Hesaplama (A4 yapraklarındaki ana elementlerin sayısı)
+  const paragraphCount = elements.editorBody.querySelectorAll(".editor-page-sheet p, .editor-page-sheet h1, .editor-page-sheet h2, .editor-page-sheet h3, .editor-page-sheet pre").length;
+
+  // Süre Hesaplamaları
+  // Ortalama Okuma Hızı: 200 kelime/dk = ~3.3 kelime/sn
+  const readSeconds = Math.round(wordCount / 3.3);
+  let readTimeText = "0 sn";
+  if (readSeconds >= 60) {
+    readTimeText = `${Math.floor(readSeconds / 60)} dk ${readSeconds % 60} sn`;
+  } else if (readSeconds > 0) {
+    readTimeText = `${readSeconds} sn`;
+  }
+
+  // Ortalama Yazma Hızı: 40 kelime/dk = ~0.65 kelime/sn
+  const writeSeconds = Math.round(wordCount / 0.65);
+  let writeTimeText = "0 sn";
+  if (writeSeconds >= 60) {
+    writeTimeText = `${Math.floor(writeSeconds / 60)} dk ${writeSeconds % 60} sn`;
+  } else if (writeSeconds > 0) {
+    writeTimeText = `${writeSeconds} sn`;
+  }
+
+  // Türkçe Okunabilirlik Skoru (Ateşman Formülü)
+  // Formül: R = 198.825 - 40.175 * (Hece / Kelime) - 2.610 * (Kelime / Cümle)
+  // Türkçe hece sayısı kabaca ünlü harf sayısı (a,e,ı,i,o,ö,u,ü) sayarak bulunur.
+  const vowels = cleanText.match(/[aeıioöuüAEIİOÖUÜ]/g);
+  const syllableCount = vowels ? vowels.length : 0;
+
+  let readabilityScore = 0;
+  let readabilityDesc = "Analiz yapılabilecek yeterli metin bulunmuyor. Lütfen daha fazla cümle yazın.";
+
+  if (wordCount > 0 && sentenceCount > 0) {
+    const avgSyllable = syllableCount / wordCount;
+    const avgSentenceLength = wordCount / sentenceCount;
+    readabilityScore = 198.825 - (40.175 * avgSyllable) - (2.610 * avgSentenceLength);
+    readabilityScore = Math.max(0, Math.min(100, Math.round(readabilityScore)));
+
+    // Ateşman Değerlendirme Ölçeği
+    if (readabilityScore >= 90) {
+      readabilityDesc = `<b>Çok Kolay (${readabilityScore}/100)</b>: İlkokul düzeyindeki okuyucular için uygundur. Cümleler ve kelimeler son derece kısa ve anlaşılırdır.`;
+    } else if (readabilityScore >= 70) {
+      readabilityDesc = `<b>Kolay (${readabilityScore}/100)</b>: Ortaokul düzeyindeki okuyucular için uygundur. Rahat okunan, akıcı bir dil yapısına sahiptir.`;
+    } else if (readabilityScore >= 50) {
+      readabilityDesc = `<b>Orta Güçlükte (${readabilityScore}/100)</b>: Lise düzeyindeki okuyucular için uygundur. Günlük gazete ve genel yazı diline denk standart zorluktadır.`;
+    } else if (readabilityScore >= 30) {
+      readabilityDesc = `<b>Zor (${readabilityScore}/100)</b>: Yükseköğretim düzeyindeki okuyucular için uygundur. Teknik ve edebi terimler barındırır.`;
+    } else {
+      readabilityDesc = `<b>Çok Zor (${readabilityScore}/100)</b>: Akademik ve bilimsel düzeydedir. Kelimeler uzun, cümle yapıları karmaşık ve uzundur.`;
+    }
+  }
+
+  // Arayüz Değerlerini Güncelleme
+  document.getElementById("anal-word-count").textContent = wordCount;
+  document.getElementById("anal-char-count").textContent = charCount;
+  document.getElementById("anal-sentence-count").textContent = sentenceCount;
+  document.getElementById("anal-paragraph-count").textContent = paragraphCount;
+  document.getElementById("anal-read-time").textContent = readTimeText;
+  document.getElementById("anal-write-time").textContent = writeTimeText;
+  
+  const badge = document.getElementById("readability-score-badge");
+  const progress = document.getElementById("readability-progress");
+  const desc = document.getElementById("readability-desc");
+
+  if (badge) badge.textContent = `${readabilityScore} / 100`;
+  if (progress) progress.style.width = `${readabilityScore}%`;
+  if (desc) desc.innerHTML = readabilityDesc;
+}
+
+// 3. MİKROFON SES DALGASI ANALİZİ VE CANLI ANİMASYON (WEB AUDIO API)
+let speechAudioStream = null;
+let speechAudioContext = null;
+let speechCanvasAnimId = null;
+
+function startSpeechWaveAnimation() {
+  const container = document.getElementById("speech-visualizer-container");
+  const canvas = document.getElementById("speech-wave-canvas");
+  if (!container || !canvas) return;
+
+  container.style.display = "flex";
+  const ctx = canvas.getContext("2d");
+
+  // Mikrofondan ses sinyali alalım
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    speechAudioStream = stream;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    speechAudioContext = new AudioContextClass();
+    const source = speechAudioContext.createMediaStreamSource(stream);
+    const analyser = speechAudioContext.createAnalyser();
+    analyser.fftSize = 64;
+    source.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    function draw() {
+      if (!isSpeechRecording) return;
+      speechCanvasAnimId = requestAnimationFrame(draw);
+
+      analyser.getByteFrequencyData(dataArray);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const barWidth = (canvas.width / bufferLength) * 1.6;
+      let barHeight;
+      let x = 0;
+
+      // Koyu/Açık temaya göre dalga rengi
+      const isDarkMode = document.body.getAttribute("data-theme") !== "light";
+      ctx.fillStyle = isDarkMode ? "#818cf8" : "#6366f1";
+
+      for (let i = 0; i < bufferLength; i++) {
+        barHeight = (dataArray[i] / 255) * canvas.height * 0.9;
+        const y = (canvas.height - barHeight) / 2;
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x, y, barWidth - 2, barHeight, 3);
+        } else {
+          ctx.rect(x, y, barWidth - 2, barHeight);
+        }
+        ctx.fill();
+
+        x += barWidth;
+      }
+    }
+
+    draw();
+  }).catch(err => {
+    console.warn("Mikrofon donanım dalga animasyonu başlatılamadı:", err);
+    // Simüle edilmiş dalga animasyonu (Dikte çalışıyor ama Web Audio API engelliyse)
+    function drawSimulated() {
+      if (!isSpeechRecording) return;
+      speechCanvasAnimId = requestAnimationFrame(drawSimulated);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const isDarkMode = document.body.getAttribute("data-theme") !== "light";
+      ctx.fillStyle = isDarkMode ? "#818cf8" : "#6366f1";
+
+      let x = 0;
+      const barWidth = canvas.width / 16;
+      for (let i = 0; i < 16; i++) {
+        const barHeight = Math.random() * canvas.height * 0.8;
+        const y = (canvas.height - barHeight) / 2;
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x, y, barWidth - 2, barHeight, 3);
+        } else {
+          ctx.rect(x, y, barWidth - 2, barHeight);
+        }
+        ctx.fill();
+        x += barWidth;
+      }
+    }
+    drawSimulated();
+  });
+}
+
+function stopSpeechWaveAnimation() {
+  const container = document.getElementById("speech-visualizer-container");
+  if (container) container.style.display = "none";
+
+  if (speechCanvasAnimId) {
+    cancelAnimationFrame(speechCanvasAnimId);
+    speechCanvasAnimId = null;
+  }
+
+  if (speechAudioStream) {
+    speechAudioStream.getTracks().forEach(track => track.stop());
+    speechAudioStream = null;
+  }
+
+  if (speechAudioContext) {
+    try {
+      speechAudioContext.close();
+    } catch (e) {}
+    speechAudioContext = null;
   }
 }
 

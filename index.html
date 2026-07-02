@@ -128,7 +128,8 @@
       </button>
       
       <!-- Sayfa Düzenleme Alanı -->
-      <div class="editor-wrapper">
+      <div class="editor-container-flex">
+        <div class="editor-wrapper">
         <!-- Sayfa Üst Bilgileri -->
         <div class="page-meta">
           <div class="icon-selector-wrapper">
@@ -152,6 +153,9 @@
             </button>
             <button class="page-action-btn" id="zen-trigger-btn" title="Zen Modu (Ctrl+Shift+Z)">
               <i data-lucide="eye"></i>
+            </button>
+            <button class="page-action-btn" id="analytics-trigger-btn" title="Not İstatistikleri ve Analiz">
+              <i data-lucide="bar-chart-2"></i>
             </button>
             <button class="page-action-btn" id="print-page-btn" title="Belgeyi Yazdır">
               <i data-lucide="printer"></i>
@@ -285,6 +289,17 @@
             <input type="datetime-local" id="status-reminder-input" style="background:transparent; border:none; color:var(--text-secondary); font-size:11px; font-family:var(--font-sans); outline:none; cursor:pointer;" title="Hatırlatıcı Ayarla">
           </div>
         </div>
+        
+        <!-- Sağ Başlık Gezgini (Outline) -->
+        <aside class="editor-outline-panel" id="editor-outline-panel">
+          <div class="outline-header">
+            <i data-lucide="book-open"></i>
+            <span>Belge Gezgini</span>
+          </div>
+          <ul class="outline-list" id="outline-list">
+            <!-- Dinamik doldurulacak -->
+          </ul>
+        </aside>
       </div>
     </main>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -845,6 +860,77 @@
   <!-- NOTION TARZI SLASH KOMUTLARI MENÜSÜ -->
   <div class="slash-commands-menu" id="slash-commands-menu" style="display: none;">
     <!-- Komut listesi dinamik doldurulur -->
+  </div>
+
+  <!-- SES DIKTE GÖRSELLEŞTİRİCİ KUTUSU -->
+  <div class="speech-visualizer-container" id="speech-visualizer-container" style="display: none;">
+    <div class="speech-visualizer-wave">
+      <canvas id="speech-wave-canvas" width="120" height="30"></canvas>
+    </div>
+    <div class="speech-visualizer-status">
+      <span class="speech-visualizer-dot"></span>
+      <span id="speech-visualizer-text">Dinleniyor...</span>
+    </div>
+  </div>
+
+  <!-- NOT İSTATİSTİKLERİ VE ANALİZ MODAL -->
+  <div class="modal-overlay" id="analytics-modal">
+    <div class="modal-content analytics-modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group" style="display:flex; align-items:center; gap:10px; color:var(--text-primary);">
+          <i data-lucide="bar-chart-2" style="width:20px; height:20px; color:var(--accent);"></i>
+          <h3 style="font-size:16px; font-weight:600; margin:0;">Not İstatistikleri & Analiz</h3>
+        </div>
+        <button class="close-modal-btn" id="close-analytics-modal">&times;</button>
+      </div>
+      <div class="analytics-body" style="padding:16px 20px 24px 20px;">
+        <!-- Temel Sayılar Izgarası -->
+        <div class="analytics-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:20px;">
+          <div class="analytics-card-stat" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:14px; border-radius:10px; display:flex; flex-direction:column; align-items:center;">
+            <span class="stat-value" id="anal-word-count" style="font-size:22px; font-weight:700; color:var(--accent);">0</span>
+            <span class="stat-label" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Kelime</span>
+          </div>
+          <div class="analytics-card-stat" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:14px; border-radius:10px; display:flex; flex-direction:column; align-items:center;">
+            <span class="stat-value" id="anal-char-count" style="font-size:22px; font-weight:700; color:var(--accent);">0</span>
+            <span class="stat-label" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Karakter</span>
+          </div>
+          <div class="analytics-card-stat" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:14px; border-radius:10px; display:flex; flex-direction:column; align-items:center;">
+            <span class="stat-value" id="anal-sentence-count" style="font-size:22px; font-weight:700; color:var(--accent);">0</span>
+            <span class="stat-label" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Cümle</span>
+          </div>
+          <div class="analytics-card-stat" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:14px; border-radius:10px; display:flex; flex-direction:column; align-items:center;">
+            <span class="stat-value" id="anal-paragraph-count" style="font-size:22px; font-weight:700; color:var(--accent);">0</span>
+            <span class="stat-label" style="font-size:11px; color:var(--text-muted); margin-top:4px;">Paragraf</span>
+          </div>
+        </div>
+        
+        <!-- Süre & Kalite Bilgileri -->
+        <div class="analytics-details" style="display:flex; flex-direction:column; gap:10px;">
+          <div class="anal-detail-row" style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-secondary);">
+            <span>Tahmini Okuma Süresi:</span>
+            <strong id="anal-read-time" style="color:var(--text-primary);">0 sn</strong>
+          </div>
+          <div class="anal-detail-row" style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-secondary); margin-bottom:10px;">
+            <span>Tahmini Yazma Süresi:</span>
+            <strong id="anal-write-time" style="color:var(--text-primary);">0 sn</strong>
+          </div>
+          
+          <div class="anal-divider" style="border-top:1px solid var(--border-color); margin:6px 0;"></div>
+          
+          <!-- Türkçe Okunabilirlik Skoru -->
+          <div class="readability-section" style="margin-top:10px;">
+            <div class="readability-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <span style="font-size:13px; color:var(--text-secondary);">Türkçe Okunabilirlik Seviyesi (Ateşman):</span>
+              <span class="readability-badge" id="readability-score-badge" style="background:var(--accent-tint); color:var(--accent); font-size:12px; font-weight:700; padding:4px 10px; border-radius:12px;">0 / 100</span>
+            </div>
+            <div class="progress-bar-wrapper" style="width:100%; height:8px; background:var(--bg-secondary); border-radius:4px; overflow:hidden; margin-bottom:8px; border:1px solid var(--border-color);">
+              <div class="progress-bar-fill" id="readability-progress" style="width: 0%; height:100%; background:var(--accent); transition: width 0.5s ease;"></div>
+            </div>
+            <p class="readability-desc" id="readability-desc" style="font-size:12px; color:var(--text-muted); margin:4px 0 0 0; line-height:1.4;">Veri hesaplanıyor...</p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 3. ZEN MODU YÜZEN ÇIKIŞ BUTONU -->
