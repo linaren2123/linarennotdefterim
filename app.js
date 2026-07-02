@@ -5523,8 +5523,53 @@ function adjustPageBreaks() {
   });
 
   // İmleç konumunu kusursuz bir şekilde geri yükle
+  let selectionRestored = false;
   if (rangeInfo) {
-    restoreSelectionState(elements.editorBody, rangeInfo);
+    // Seçim yapılan düğümün hala editörün içinde ve sayfa yapraklarının altında olduğundan emin olalım (kök elemanda ise pas geçilir)
+    const isValidNode = elements.editorBody.contains(rangeInfo.startContainer) && 
+                        rangeInfo.startContainer !== elements.editorBody;
+    
+    if (isValidNode) {
+      restoreSelectionState(elements.editorBody, rangeInfo);
+      selectionRestored = true;
+    }
+  }
+
+  // İmleç kurtarılamadıysa veya kök dizine kaydıysa ilk sayfa yaprağının ilk paragrafına odaklayalım
+  if (!selectionRestored) {
+    focusFirstPageSheet();
+  }
+}
+
+// İlk sayfa yaprağının ilk paragrafına güvenli odaklanma fonksiyonu
+function focusFirstPageSheet() {
+  if (!elements.editorBody) return;
+  const firstSheet = elements.editorBody.querySelector(".editor-page-sheet");
+  if (!firstSheet) return;
+  
+  let target = firstSheet.firstElementChild;
+  if (!target) {
+    target = document.createElement("p");
+    target.innerHTML = "<br>";
+    firstSheet.appendChild(target);
+  }
+  
+  try {
+    const range = document.createRange();
+    const selection = window.getSelection();
+    
+    if (target.firstChild) {
+      range.setStart(target.firstChild, 0);
+    } else {
+      range.setStart(target, 0);
+    }
+    range.collapse(true);
+    
+    selection.removeAllRanges();
+    selection.addRange(range);
+    elements.editorBody.focus();
+  } catch (e) {
+    console.warn("focusFirstPageSheet odaklama hatası:", e);
   }
 }
 
