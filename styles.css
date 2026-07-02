@@ -395,16 +395,15 @@ button, input, textarea {
 .editor-wrapper {
   max-width: 880px;
   width: 100%;
-  margin: 30px auto;
-  padding: 30px 40px 0 40px;
+  margin: 20px auto;
+  padding: 20px 40px 0 40px;
   display: flex;
   flex-direction: column;
   position: relative;
-  min-height: calc(100vh - 60px);
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
+  min-height: calc(100vh - 40px);
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 /* PAGE HEADER META */
@@ -2169,33 +2168,35 @@ body[data-theme="light"] .settings-card .btn {
 
 /* GÜÇ SÜRÜMÜ YENİ ÖZELLİK STİLLERİ */
 
-/* 1. KELİME BİLGİ ÇUBUĞU (STATUS BAR) */
+/* 1. KELİME BİLGİ ÇUBUĞU (STATUS BAR - YÜZEN PİL GÖRÜNÜMÜ) */
 .editor-status-bar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color);
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
   font-size: 11px;
   color: var(--text-muted);
   user-select: none;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-secondary);
   position: sticky;
-  bottom: 0;
+  bottom: 20px;
   z-index: 20;
-  margin-top: 30px;
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
+  margin: 30px auto 10px auto;
+  border-radius: 30px;
+  box-shadow: var(--shadow-md);
+  width: fit-content;
+  backdrop-filter: blur(8px);
 }
 
 /* Word Tarzı Sayfa Yaprağı (Page Sheet) */
 .editor-page-sheet {
   background-color: #1e1e24; /* Sayfa içi rengi */
   color: var(--text-primary);
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4), 0 8px 16px -6px rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12); /* Koyu modda belirgin sayfa çerçevesi */
+  border-radius: 12px; /* 12px yuvarlatılmış köşe */
   padding: 40px 50px;
   min-height: 728px;
   max-height: 728px;
@@ -2210,7 +2211,8 @@ body[data-theme="light"] .settings-card .btn {
 
 body[data-theme="light"] .editor-page-sheet {
   background-color: #ffffff;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -6px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.12); /* Açık modda belirgin sayfa çerçevesi */
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
 }
 
 .editor-page-break {
