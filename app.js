@@ -1202,10 +1202,7 @@ function initEventListeners() {
   elements.editorBody.addEventListener("input", () => {
     const page = pages.find(p => p.id === currentPageId);
     if (page) {
-      const clone = elements.editorBody.cloneNode(true);
-      const tempBreaks = clone.querySelectorAll(".editor-page-break");
-      tempBreaks.forEach(tb => tb.remove());
-      page.content = clone.innerHTML;
+      page.content = getCurrentEditorContent();
       
       saveData();
       
@@ -1304,10 +1301,7 @@ function initEventListeners() {
               
               const page = pages.find(p => p.id === currentPageId);
               if (page) {
-                const clone = elements.editorBody.cloneNode(true);
-                const tempBreaks = clone.querySelectorAll(".editor-page-break");
-                tempBreaks.forEach(tb => tb.remove());
-                page.content = clone.innerHTML;
+                page.content = getCurrentEditorContent();
                 saveData();
               }
             }
@@ -5308,10 +5302,7 @@ async function parsePptxFile(file) {
     for (let node of textNodes) {
       if (node.textContent.trim()) {
         slideTexts.push(node.textContent.trim());
-      }
-    }
-
-    const slideContent = slideTexts.join(" ");
+  const slideContent = slideTexts.join(" ");
 
     fullHtml += `<div class="pptx-slide">`;
     fullHtml += `<h4>SLAYT ${i + 1}</h4>`;
@@ -5331,15 +5322,42 @@ function triggerPageBreakAdjustment() {
   pageBreakTimeout = setTimeout(adjustPageBreaks, 300); // 300ms debounce ile anlık ve akıcı sayfa geçişi
 }
 
+function getCurrentEditorContent() {
+  if (!elements.editorBody) return "";
+  const clone = elements.editorBody.cloneNode(true);
+  
+  // Sayfa yapraklarının içerik elemanlarını seç
+  const contentElements = clone.querySelectorAll(".editor-page-sheet > *");
+  
+  if (contentElements.length > 0) {
+    // Sadece asıl metin/içerik elemanlarını düz liste halinde birleştir
+    return Array.from(contentElements)
+      .filter(el => !el.classList.contains("editor-page-break"))
+      .map(el => el.outerHTML)
+      .join("");
+  }
+  
+  // Sayfa yaprağı bulunamazsa klasik filtrelemeyle dön
+  const tempBreaks = clone.querySelectorAll(".editor-page-break");
+  tempBreaks.forEach(tb => tb.remove());
+  return clone.innerHTML;
+}
+
 function splitOverlongParagraphs() {
   if (!elements.editorBody) return false;
-  const children = Array.from(elements.editorBody.children);
+  
+  // Önce tüm içerik elemanlarını seç
+  let children = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet > *"));
+  if (children.length === 0) {
+    children = Array.from(elements.editorBody.children);
+  }
+
   const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
   let modified = false;
 
   children.forEach(child => {
     if (child.nodeType !== Node.ELEMENT_NODE) return;
-    if (child.classList.contains("editor-page-break")) return;
+    if (child.classList.contains("editor-page-break") || child.classList.contains("editor-page-sheet")) return;
     
     // Yalnızca P, DIV ve H etiketlerini bölelim (tabloları veya kod bloklarını bölmeyelim)
     const allowedTags = ["P", "DIV", "H1", "H2", "H3"];
@@ -5386,47 +5404,67 @@ function adjustPageBreaks() {
   }
 
   // 1. ÖLÇÜM AŞAMASI (BATCH READ-ONLY: Layout thrashing engellemek için)
-  const children = Array.from(elements.editorBody.children);
-  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
-  let currentHeight = 0;
+  let children = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet > *"));
+  if (children.length === 0) {
+    children = Array.from(elements.editorBody.children);
+  }
 
-  const toInsertBefore = [];
-  const toRemove = [];
+  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
+  const pagesData = [];
+  let currentPageElements = [];
+  let currentHeight = 0;
 
   children.forEach(child => {
     if (child.nodeType !== Node.ELEMENT_NODE) return;
     
-    if (child.classList.contains("editor-page-break")) {
-      toRemove.push(child);
-      return;
-    }
+    // Geçici veya boş elemanları atla
+    if (child.classList.contains("editor-page-break") || child.classList.contains("editor-page-sheet")) return;
 
-    const childHeight = child.offsetHeight;
+    // Elemanın dikey yüksekliğini ölç
+    const childHeight = child.offsetHeight || 24;
 
-    if (currentHeight + childHeight > PAGE_LIMIT) {
-      toInsertBefore.push(child);
+    if (currentHeight + childHeight > PAGE_LIMIT && currentPageElements.length > 0) {
+      pagesData.push(currentPageElements);
+      currentPageElements = [child];
       currentHeight = childHeight;
     } else {
+      currentPageElements.push(child);
       currentHeight += childHeight;
     }
   });
 
-  // Değişiklik yoksa DOM'a dokunmayarak gereksiz odak kayıplarını önleyelim
-  const currentBreaks = Array.from(elements.editorBody.querySelectorAll(".editor-page-break"));
-  let needsUpdate = false;
+  if (currentPageElements.length > 0) {
+    pagesData.push(currentPageElements);
+  }
 
-  if (currentBreaks.length !== toInsertBefore.length) {
-    needsUpdate = true;
+  if (pagesData.length === 0) {
+    pagesData.push([]);
+  }
+
+  // Değişiklik gerekip gerekmediğini kontrol et
+  const currentSheets = Array.from(elements.editorBody.querySelectorAll(".editor-page-sheet"));
+  let needsRebuild = false;
+
+  if (currentSheets.length !== pagesData.length) {
+    needsRebuild = true;
   } else {
-    for (let i = 0; i < toInsertBefore.length; i++) {
-      if (currentBreaks[i].nextElementSibling !== toInsertBefore[i]) {
-        needsUpdate = true;
+    for (let i = 0; i < pagesData.length; i++) {
+      const sheetChildren = Array.from(currentSheets[i].children);
+      if (sheetChildren.length !== pagesData[i].length) {
+        needsRebuild = true;
         break;
       }
+      for (let j = 0; j < sheetChildren.length; j++) {
+        if (sheetChildren[j] !== pagesData[i][j]) {
+          needsRebuild = true;
+          break;
+        }
+      }
+      if (needsRebuild) break;
     }
   }
 
-  if (!needsUpdate && toRemove.length === 0) {
+  if (!needsRebuild) {
     return; // Herhangi bir değişiklik gerekmiyor!
   }
 
@@ -5441,18 +5479,30 @@ function adjustPageBreaks() {
     rangeInfo = saveSelectionState(elements.editorBody, savedRange);
   }
 
-  // Eski sayfa sınırlarını temizle
-  toRemove.forEach(b => b.remove());
+  // Editör gövdesini temizle ve yeni sayfa yapraklarını oluştur
+  elements.editorBody.innerHTML = "";
 
-  // Yeni sayfa sınırlarını ekle
-  let pageNum = 1;
-  toInsertBefore.forEach(child => {
-    pageNum++;
-    const pageBreak = document.createElement("div");
-    pageBreak.className = "editor-page-break";
-    pageBreak.setAttribute("contenteditable", "false");
-    pageBreak.innerHTML = `<span>Sayfa ${pageNum}</span>`;
-    child.parentNode.insertBefore(pageBreak, child);
+  pagesData.forEach((pageEls, index) => {
+    if (index > 0) {
+      const pageBreak = document.createElement("div");
+      pageBreak.className = "editor-page-break";
+      pageBreak.setAttribute("contenteditable", "false");
+      elements.editorBody.appendChild(pageBreak);
+    }
+
+    const pageSheet = document.createElement("div");
+    pageSheet.className = "editor-page-sheet";
+    pageSheet.setAttribute("data-page", index + 1);
+    
+    pageEls.forEach(el => pageSheet.appendChild(el));
+    
+    if (pageEls.length === 0) {
+      const emptyP = document.createElement("p");
+      emptyP.innerHTML = "<br>";
+      pageSheet.appendChild(emptyP);
+    }
+
+    elements.editorBody.appendChild(pageSheet);
   });
 
   // İmleç konumunu kusursuz bir şekilde geri yükle

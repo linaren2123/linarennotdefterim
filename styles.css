@@ -393,18 +393,18 @@ button, input, textarea {
 
 /* EDITOR AREA (BELGE SAYFASI GÖRÜNÜMÜ) */
 .editor-wrapper {
-  max-width: 760px;
+  max-width: 880px;
   width: 100%;
   margin: 30px auto;
-  padding: 40px 50px 0 50px;
+  padding: 30px 40px 0 40px;
   display: flex;
   flex-direction: column;
   position: relative;
   min-height: calc(100vh - 60px);
-  background-color: #1a1a1e; /* Sade mat gri sayfa */
+  background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
 }
 
 /* PAGE HEADER META */
@@ -2180,17 +2180,37 @@ body[data-theme="light"] .settings-card .btn {
   font-size: 11px;
   color: var(--text-muted);
   user-select: none;
-  background-color: #1a1a1e;
+  background-color: var(--bg-primary);
   position: sticky;
   bottom: 0;
-  z-index: 10;
-  margin-top: auto;
+  z-index: 20;
+  margin-top: 30px;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
 
-body[data-theme="light"] .editor-status-bar {
+/* Word Tarzı Sayfa Yaprağı (Page Sheet) */
+.editor-page-sheet {
+  background-color: #1e1e24; /* Sayfa içi rengi */
+  color: var(--text-primary);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4), 0 8px 16px -6px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 40px 50px;
+  min-height: 728px;
+  max-height: 728px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  outline: none;
+}
+
+body[data-theme="light"] .editor-page-sheet {
   background-color: #ffffff;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 8px 16px -6px rgba(0, 0, 0, 0.08);
 }
 
 .editor-page-break {
@@ -2198,38 +2218,21 @@ body[data-theme="light"] .editor-status-bar {
   align-items: center;
   justify-content: center;
   position: relative;
-  margin: 36px 0;
+  margin: 16px 0;
   user-select: none;
   pointer-events: none;
+  height: 24px;
 }
 
 .editor-page-break::before {
   content: "";
   position: absolute;
-  left: -50px;
-  right: -50px;
+  left: 0;
+  right: 0;
   top: 50%;
   border-top: 1px dashed var(--border-color);
+  opacity: 0.5;
   z-index: 1;
-}
-
-.editor-page-break span {
-  position: relative;
-  background-color: #1a1a1e;
-  padding: 4px 14px;
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 600;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  z-index: 2;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-body[data-theme="light"] .editor-page-break span {
-  background-color: #ffffff;
 }
 .status-separator {
   color: rgba(255, 255, 255, 0.08);
