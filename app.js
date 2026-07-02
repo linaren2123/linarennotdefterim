@@ -1202,11 +1202,16 @@ function initEventListeners() {
   elements.editorBody.addEventListener("input", () => {
     const page = pages.find(p => p.id === currentPageId);
     if (page) {
-      page.content = elements.editorBody.innerHTML;
+      const clone = elements.editorBody.cloneNode(true);
+      const tempBreaks = clone.querySelectorAll(".editor-page-break");
+      tempBreaks.forEach(tb => tb.remove());
+      page.content = clone.innerHTML;
+      
       saveData();
       
       // Kelime sayacı ve backlinks listesini güncelle
       updateStatusBar();
+      triggerPageBreakAdjustment();
       scheduleVersionSnapshot(page.id);
     }
   });
@@ -1299,7 +1304,10 @@ function initEventListeners() {
               
               const page = pages.find(p => p.id === currentPageId);
               if (page) {
-                page.content = elements.editorBody.innerHTML;
+                const clone = elements.editorBody.cloneNode(true);
+                const tempBreaks = clone.querySelectorAll(".editor-page-break");
+                tempBreaks.forEach(tb => tb.remove());
+                page.content = clone.innerHTML;
                 saveData();
               }
             }
@@ -2263,6 +2271,7 @@ function selectPage(pageId) {
   // Kelime sayacı ve backlinks listesini güncelle
   updateStatusBar();
   updateBacklinks();
+  adjustPageBreaks();
   
   // Hatırlatıcı değerini yükle
   try {
@@ -5311,6 +5320,121 @@ async function parsePptxFile(file) {
   }
 
   return fullHtml;
+}
+
+// --- DİNAMİK SAYFA MANTIĞI DÜZENLEME MOTORU ---
+let pageBreakTimeout = null;
+
+function triggerPageBreakAdjustment() {
+  if (!currentPageId) return;
+  clearTimeout(pageBreakTimeout);
+  pageBreakTimeout = setTimeout(adjustPageBreaks, 1500);
+}
+
+function adjustPageBreaks() {
+  if (!currentPageId || !elements.editorBody) return;
+
+  // İmleç durumunu (selection) kaydet
+  const selection = window.getSelection();
+  let savedRange = null;
+  let rangeInfo = null;
+
+  if (selection.rangeCount > 0) {
+    savedRange = selection.getRangeAt(0);
+    rangeInfo = saveSelectionState(elements.editorBody, savedRange);
+  }
+
+  // Mevcut otomatik sayfa sınırlarını kaldır
+  const existingBreaks = elements.editorBody.querySelectorAll(".editor-page-break");
+  existingBreaks.forEach(b => b.remove());
+
+  const children = Array.from(elements.editorBody.children);
+  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px (font-size 15px, line-height 24px baz alınmıştır)
+  let currentHeight = 0;
+  let pageNum = 1;
+
+  children.forEach(child => {
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    
+    // Geçici veya boş elemanları atla
+    if (child.classList.contains("editor-page-break")) return;
+
+    // Elemanın dikey yüksekliğini ölç
+    const childHeight = child.offsetHeight;
+
+    if (currentHeight + childHeight > PAGE_LIMIT) {
+      pageNum++;
+      
+      const pageBreak = document.createElement("div");
+      pageBreak.className = "editor-page-break";
+      pageBreak.setAttribute("contenteditable", "false");
+      pageBreak.innerHTML = `<span>Sayfa ${pageNum}</span>`;
+      
+      child.parentNode.insertBefore(pageBreak, child);
+      currentHeight = childHeight;
+    } else {
+      currentHeight += childHeight;
+    }
+  });
+
+  // İmleç konumunu koru
+  if (rangeInfo) {
+    restoreSelectionState(elements.editorBody, rangeInfo);
+  }
+}
+
+// Eleman ekleme/çıkarma durumunda imlecin kaymasını önleyen karakter tabanlı durum koruyucuları
+function saveSelectionState(container, range) {
+  const preCaretRange = range.cloneRange();
+  preCaretRange.selectNodeContents(container);
+  preCaretRange.setEnd(range.startContainer, range.startOffset);
+  const startOffset = preCaretRange.toString().length;
+
+  const preCaretEndRange = range.cloneRange();
+  preCaretEndRange.selectNodeContents(container);
+  preCaretEndRange.setEnd(range.endContainer, range.endOffset);
+  const endOffset = preCaretEndRange.toString().length;
+
+  return { startOffset, endOffset };
+}
+
+function restoreSelectionState(container, info) {
+  let charIndex = 0;
+  const range = document.createRange();
+  range.setStart(container, 0);
+  range.collapse(true);
+  
+  const nodeQueue = [container];
+  let startFound = false;
+  let endFound = false;
+
+  while (nodeQueue.length > 0) {
+    const node = nodeQueue.shift();
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const nextCharIndex = charIndex + node.length;
+      
+      if (!startFound && info.startOffset >= charIndex && info.startOffset <= nextCharIndex) {
+        range.setStart(node, info.startOffset - charIndex);
+        startFound = true;
+      }
+      if (!endFound && info.endOffset >= charIndex && info.endOffset <= nextCharIndex) {
+        range.setEnd(node, info.endOffset - charIndex);
+        endFound = true;
+      }
+      charIndex = nextCharIndex;
+    } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("editor-page-break")) {
+      for (let i = node.childNodes.length - 1; i >= 0; i--) {
+        nodeQueue.unshift(node.childNodes[i]);
+      }
+    }
+  }
+
+  if (startFound && endFound) {
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
 }
 
 

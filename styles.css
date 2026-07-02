@@ -396,7 +396,7 @@ button, input, textarea {
   max-width: 760px;
   width: 100%;
   margin: 30px auto;
-  padding: 40px 50px 80px 50px;
+  padding: 40px 50px 0 50px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -2175,12 +2175,61 @@ body[data-theme="light"] .settings-card .btn {
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border-color);
   font-size: 11px;
   color: var(--text-muted);
   user-select: none;
-  margin-top: 20px;
+  background-color: #1a1a1e;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  margin-top: auto;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+body[data-theme="light"] .editor-status-bar {
+  background-color: #ffffff;
+}
+
+.editor-page-break {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 36px 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+.editor-page-break::before {
+  content: "";
+  position: absolute;
+  left: -50px;
+  right: -50px;
+  top: 50%;
+  border-top: 1px dashed var(--border-color);
+  z-index: 1;
+}
+
+.editor-page-break span {
+  position: relative;
+  background-color: #1a1a1e;
+  padding: 4px 14px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  z-index: 2;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+body[data-theme="light"] .editor-page-break span {
+  background-color: #ffffff;
 }
 .status-separator {
   color: rgba(255, 255, 255, 0.08);
