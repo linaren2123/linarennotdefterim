@@ -3637,6 +3637,24 @@ function registerServiceWorker() {
     navigator.serviceWorker.register("./sw.js")
       .then((reg) => {
         console.log("LinareN: Service Worker başarıyla kaydedildi:", reg.scope);
+        
+        // Servis çalıştırıcı güncelleme kontrolü
+        reg.onupdatefound = () => {
+          const installingWorker = reg.installing;
+          if (installingWorker) {
+            installingWorker.onstatechange = () => {
+              if (installingWorker.state === "installed") {
+                if (navigator.serviceWorker.controller) {
+                  console.log("LinareN: Yeni güncelleme mevcut. Sayfa yenileniyor...");
+                  showSyncStatus("Yeni güncelleme algılandı, çalışma alanı yenileniyor...", "info");
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 1500);
+                }
+              }
+            };
+          }
+        };
       })
       .catch((err) => {
         console.error("LinareN: Service Worker kaydı başarısız:", err);
