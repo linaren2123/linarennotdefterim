@@ -5328,12 +5328,109 @@ let pageBreakTimeout = null;
 function triggerPageBreakAdjustment() {
   if (!currentPageId) return;
   clearTimeout(pageBreakTimeout);
-  pageBreakTimeout = setTimeout(adjustPageBreaks, 1500);
+  pageBreakTimeout = setTimeout(adjustPageBreaks, 300); // 300ms debounce ile anlık ve akıcı sayfa geçişi
+}
+
+function splitOverlongParagraphs() {
+  if (!elements.editorBody) return false;
+  const children = Array.from(elements.editorBody.children);
+  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
+  let modified = false;
+
+  children.forEach(child => {
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    if (child.classList.contains("editor-page-break")) return;
+    
+    // Yalnızca P, DIV ve H etiketlerini bölelim (tabloları veya kod bloklarını bölmeyelim)
+    const allowedTags = ["P", "DIV", "H1", "H2", "H3"];
+    if (!allowedTags.includes(child.tagName)) return;
+
+    const childHeight = child.offsetHeight;
+    if (childHeight > PAGE_LIMIT) {
+      // Metni kelime sınırından böl
+      const text = child.innerHTML;
+      const mid = Math.floor(text.length / 2);
+      // En yakın boşluk karakterini bul
+      let spaceIdx = text.indexOf(" ", mid);
+      if (spaceIdx === -1) {
+        spaceIdx = text.lastIndexOf(" ", mid);
+      }
+      
+      if (spaceIdx !== -1 && spaceIdx > 0 && spaceIdx < text.length - 1) {
+        const part1 = text.substring(0, spaceIdx);
+        const part2 = text.substring(spaceIdx + 1);
+
+        child.innerHTML = part1;
+        
+        const newPara = document.createElement(child.tagName);
+        newPara.innerHTML = part2;
+        child.parentNode.insertBefore(newPara, child.nextSibling);
+        
+        modified = true;
+      }
+    }
+  });
+
+  return modified;
 }
 
 function adjustPageBreaks() {
   if (!currentPageId || !elements.editorBody) return;
 
+  // Aşırı uzun paragrafları otomatik böl
+  const didSplit = splitOverlongParagraphs();
+  if (didSplit) {
+    // Bölünme işlemi yapıldıysa, tarayıcının DOM boyutlarını güncellemesini bekleyip tekrar tetikleyelim
+    setTimeout(adjustPageBreaks, 50);
+    return;
+  }
+
+  // 1. ÖLÇÜM AŞAMASI (BATCH READ-ONLY: Layout thrashing engellemek için)
+  const children = Array.from(elements.editorBody.children);
+  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px
+  let currentHeight = 0;
+
+  const toInsertBefore = [];
+  const toRemove = [];
+
+  children.forEach(child => {
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    
+    if (child.classList.contains("editor-page-break")) {
+      toRemove.push(child);
+      return;
+    }
+
+    const childHeight = child.offsetHeight;
+
+    if (currentHeight + childHeight > PAGE_LIMIT) {
+      toInsertBefore.push(child);
+      currentHeight = childHeight;
+    } else {
+      currentHeight += childHeight;
+    }
+  });
+
+  // Değişiklik yoksa DOM'a dokunmayarak gereksiz odak kayıplarını önleyelim
+  const currentBreaks = Array.from(elements.editorBody.querySelectorAll(".editor-page-break"));
+  let needsUpdate = false;
+
+  if (currentBreaks.length !== toInsertBefore.length) {
+    needsUpdate = true;
+  } else {
+    for (let i = 0; i < toInsertBefore.length; i++) {
+      if (currentBreaks[i].nextElementSibling !== toInsertBefore[i]) {
+        needsUpdate = true;
+        break;
+      }
+    }
+  }
+
+  if (!needsUpdate && toRemove.length === 0) {
+    return; // Herhangi bir değişiklik gerekmiyor!
+  }
+
+  // 2. YAZMA AŞAMASI (BATCH WRITE)
   // İmleç durumunu (selection) kaydet
   const selection = window.getSelection();
   let savedRange = null;
@@ -5344,40 +5441,21 @@ function adjustPageBreaks() {
     rangeInfo = saveSelectionState(elements.editorBody, savedRange);
   }
 
-  // Mevcut otomatik sayfa sınırlarını kaldır
-  const existingBreaks = elements.editorBody.querySelectorAll(".editor-page-break");
-  existingBreaks.forEach(b => b.remove());
+  // Eski sayfa sınırlarını temizle
+  toRemove.forEach(b => b.remove());
 
-  const children = Array.from(elements.editorBody.children);
-  const PAGE_LIMIT = 648; // 27 satır * 24px = 648px (font-size 15px, line-height 24px baz alınmıştır)
-  let currentHeight = 0;
+  // Yeni sayfa sınırlarını ekle
   let pageNum = 1;
-
-  children.forEach(child => {
-    if (child.nodeType !== Node.ELEMENT_NODE) return;
-    
-    // Geçici veya boş elemanları atla
-    if (child.classList.contains("editor-page-break")) return;
-
-    // Elemanın dikey yüksekliğini ölç
-    const childHeight = child.offsetHeight;
-
-    if (currentHeight + childHeight > PAGE_LIMIT) {
-      pageNum++;
-      
-      const pageBreak = document.createElement("div");
-      pageBreak.className = "editor-page-break";
-      pageBreak.setAttribute("contenteditable", "false");
-      pageBreak.innerHTML = `<span>Sayfa ${pageNum}</span>`;
-      
-      child.parentNode.insertBefore(pageBreak, child);
-      currentHeight = childHeight;
-    } else {
-      currentHeight += childHeight;
-    }
+  toInsertBefore.forEach(child => {
+    pageNum++;
+    const pageBreak = document.createElement("div");
+    pageBreak.className = "editor-page-break";
+    pageBreak.setAttribute("contenteditable", "false");
+    pageBreak.innerHTML = `<span>Sayfa ${pageNum}</span>`;
+    child.parentNode.insertBefore(pageBreak, child);
   });
 
-  // İmleç konumunu koru
+  // İmleç konumunu kusursuz bir şekilde geri yükle
   if (rangeInfo) {
     restoreSelectionState(elements.editorBody, rangeInfo);
   }
