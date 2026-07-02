@@ -149,6 +149,7 @@ function safeCreateIcons() {
     "printer": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>`,
     "feather": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" x2="2" y1="8" y2="22"/><line x1="17.5" x2="15" y1="15" y2="17.5"/></svg>`,
     "file": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>`,
+    "file-up": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="12 18 12 12 15 15"/><polyline points="12 12 9 15"/></svg>`,
     "menu": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>`,
     "rotate-ccw": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><polyline points="3 3 3 8 8 8"/></svg>`,
     "upload": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>`,
@@ -1049,6 +1050,48 @@ function initEventListeners() {
     elements.importFileInput.click();
   });
   elements.importFileInput.addEventListener("change", handleImportBackup);
+
+  // Belge İçe Aktarma (Word, Excel, PDF, PPTX, TXT) Dinleyicileri
+  const importDocBtn = document.getElementById("import-document-btn");
+  const importDocInput = document.getElementById("document-import-input");
+
+  if (importDocBtn && importDocInput) {
+    importDocBtn.addEventListener("click", () => {
+      importDocInput.click();
+    });
+
+    importDocInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        handleDocumentImport(file);
+      }
+      importDocInput.value = ""; // Temizle
+    });
+  }
+
+  // Sürükle-Bırak ile Editöre Dosya Bırakma (Drag & Drop Import)
+  if (elements.editorBody) {
+    elements.editorBody.addEventListener("dragover", (e) => {
+      if (e.dataTransfer.types.includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    });
+
+    elements.editorBody.addEventListener("drop", (e) => {
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        const allowedExtensions = [".txt", ".pdf", ".docx", ".xlsx", ".xls", ".pptx"];
+        const fileName = files[0].name.toLowerCase();
+        const matchesExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+        
+        if (matchesExtension) {
+          e.preventDefault();
+          handleDocumentImport(files[0]);
+        }
+      }
+    });
+  }
 
   // Tema Seçici Entegrasyonu
   const themeSelect = document.getElementById("theme-select");
@@ -5036,6 +5079,220 @@ function handleSlashCommandTrigger(e) {
       }
     }, 10);
   }
+}
+
+// =========================================================================
+// 12. BELGE İÇE AKTARMA MOTORU (WORD, EXCEL, PPTX, PDF, TXT)
+// =========================================================================
+
+function showImportLoader(text) {
+  const overlay = document.getElementById("import-loader-overlay");
+  const textEl = document.getElementById("import-loader-text");
+  if (overlay) overlay.style.display = "flex";
+  if (textEl) textEl.textContent = text || "Dosya dönüştürülüyor...";
+}
+
+function hideImportLoader() {
+  const overlay = document.getElementById("import-loader-overlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+async function handleDocumentImport(file) {
+  if (!file) return;
+
+  const fileName = file.name;
+  const lastDot = fileName.lastIndexOf(".");
+  const title = lastDot !== -1 ? fileName.substring(0, lastDot) : fileName;
+  const ext = fileName.substring(lastDot).toLowerCase();
+
+  showImportLoader(`"${fileName}" yükleniyor ve dönüştürülüyor...`);
+
+  try {
+    let htmlContent = "";
+
+    if (ext === ".txt") {
+      htmlContent = await parseTxtFile(file);
+    } else if (ext === ".pdf") {
+      htmlContent = await parsePdfFile(file);
+    } else if (ext === ".docx") {
+      htmlContent = await parseDocxFile(file);
+    } else if (ext === ".xlsx" || ext === ".xls") {
+      htmlContent = await parseExcelFile(file);
+    } else if (ext === ".pptx") {
+      htmlContent = await parsePptxFile(file);
+    } else {
+      throw new Error("Desteklenmeyen dosya formatı. Lütfen PDF, Word (.docx), Excel (.xlsx, .xls), PowerPoint (.pptx) veya TXT dosyası yükleyin.");
+    }
+
+    // Yeni sayfa oluştur
+    const newPage = {
+      id: "page_" + Date.now(),
+      title: title || "İçe Aktarılan Belge",
+      icon: getIconForExtension(ext),
+      starred: false,
+      deleted: false,
+      content: htmlContent
+    };
+
+    pages.push(newPage);
+    await saveData();
+    renderSidebar();
+    selectPage(newPage.id);
+    
+    // Klasör seçimini temizle
+    if (elements.pageFolderSelect) {
+      elements.pageFolderSelect.value = "";
+    }
+
+  } catch (err) {
+    console.error("Belge içe aktarım hatası:", err);
+    alert("Belge içe aktarılırken bir hata oluştu:\n" + err.message);
+  } finally {
+    hideImportLoader();
+  }
+}
+
+function getIconForExtension(ext) {
+  if (ext === ".pdf") return "file-text";
+  if (ext === ".docx") return "file-text";
+  if (ext === ".xlsx" || ext === ".xls") return "table";
+  if (ext === ".pptx") return "presentation";
+  return "file-text";
+}
+
+function parseTxtFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const paragraphs = text.split(/\r?\n/);
+      const html = paragraphs
+        .map(p => `<p>${escapeHTML(p) || "<br>"}</p>`)
+        .join("");
+      resolve(html);
+    };
+    reader.onerror = (e) => reject(new Error("TXT dosyası okunamadı."));
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
+function escapeHTML(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function parsePdfFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullTextHtml = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    
+    let lastY = null;
+    let textItems = [];
+    
+    for (let item of textContent.items) {
+      if (lastY === null || Math.abs(item.transform[5] - lastY) < 5) {
+        textItems.push(item.str);
+      } else {
+        fullTextHtml += `<p>${escapeHTML(textItems.join(" "))}</p>`;
+        textItems = [item.str];
+      }
+      lastY = item.transform[5];
+    }
+    
+    if (textItems.length > 0) {
+      fullTextHtml += `<p>${escapeHTML(textItems.join(" "))}</p>`;
+    }
+    
+    if (i < pdf.numPages) {
+      fullTextHtml += `<hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 24px 0;" /><p style="font-size: 11px; color: var(--text-muted); text-align: center;">--- Sayfa ${i + 1} ---</p>`;
+    }
+  }
+
+  return fullTextHtml || "<p>PDF dosyasından metin çıkartılamadı.</p>";
+}
+
+async function parseDocxFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+  return result.value || "<p>Word dosyasından içerik çıkartılamadı.</p>";
+}
+
+async function parseExcelFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  let fullHtml = "";
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+    let sheetHtml = XLSX.utils.sheet_to_html(worksheet);
+    
+    sheetHtml = sheetHtml.replace("<table>", '<table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px;">');
+    sheetHtml = sheetHtml.replace(/<td>/g, '<td style="border: 1px solid var(--border-color); padding: 8px; color: var(--text-secondary);">');
+    sheetHtml = sheetHtml.replace(/<th>/g, '<th style="border: 1px solid var(--border-color); padding: 8px; background-color: var(--bg-secondary); color: var(--text-primary); font-weight: 600;">');
+
+    fullHtml += `<div class="excel-sheet-wrapper" style="margin-bottom: 32px;">`;
+    fullHtml += `<h3 style="font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;"><span data-lucide="table"></span> Tablo: ${sheetName}</h3>`;
+    fullHtml += `<div style="overflow-x: auto; width: 100%; max-height: 400px; border: 1px solid var(--border-color); border-radius: 6px; padding: 4px; background: var(--bg-secondary);">${sheetHtml}</div>`;
+    fullHtml += `</div>`;
+  });
+
+  return fullHtml || "<p>Excel dosyasından tablo çıkartılamadı.</p>";
+}
+
+async function parsePptxFile(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  let slideFiles = [];
+
+  zip.forEach((relativePath, zipEntry) => {
+    if (relativePath.startsWith("ppt/slides/slide") && relativePath.endsWith(".xml")) {
+      slideFiles.push(zipEntry);
+    }
+  });
+
+  if (slideFiles.length === 0) {
+    return "<p>PowerPoint sunumunda slide dosyaları bulunamadı.</p>";
+  }
+
+  slideFiles.sort((a, b) => {
+    const numA = parseInt(a.name.match(/\d+/)[0], 10);
+    const numB = parseInt(b.name.match(/\d+/)[0], 10);
+    return numA - numB;
+  });
+
+  let fullHtml = "";
+
+  for (let i = 0; i < slideFiles.length; i++) {
+    const slideXmlText = await slideFiles[i].async("string");
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(slideXmlText, "application/xml");
+    
+    const textNodes = xmlDoc.getElementsByTagName("a:t");
+    let slideTexts = [];
+    
+    for (let node of textNodes) {
+      if (node.textContent.trim()) {
+        slideTexts.push(node.textContent.trim());
+      }
+    }
+
+    const slideContent = slideTexts.join(" ");
+
+    fullHtml += `<div class="pptx-slide">`;
+    fullHtml += `<h4>SLAYT ${i + 1}</h4>`;
+    fullHtml += `<p>${escapeHTML(slideContent) || "<i>Metinsiz slayt</i>"}</p>`;
+    fullHtml += `</div><br>`;
+  }
+
+  return fullHtml;
 }
 
 
