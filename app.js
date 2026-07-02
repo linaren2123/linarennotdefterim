@@ -5302,7 +5302,9 @@ async function parsePptxFile(file) {
     for (let node of textNodes) {
       if (node.textContent.trim()) {
         slideTexts.push(node.textContent.trim());
-  const slideContent = slideTexts.join(" ");
+      }
+    }
+    const slideContent = slideTexts.join(" ");
 
     fullHtml += `<div class="pptx-slide">`;
     fullHtml += `<h4>SLAYT ${i + 1}</h4>`;
